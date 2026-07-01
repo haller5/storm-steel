@@ -1,0 +1,26 @@
+body {
+  max-width: 720px;
+  margin: 40px auto;
+  padding: 0 16px;
+  font-family: serif;
+  line-height: 1.6;
+  font-size: 18px;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+}
+
+a {
+  color: inherit;
+}
+
+hr {
+  margin: 32px 0;
+}
+
+code {
+  font-family: monospace;
+}
