@@ -18,3 +18,23 @@ I also worked briefly on the robotic arm, which I will put here tomorrow. As for
 Goals for the next day will be 1.5 hours of reading, 1.5 hours of watching, and then either any form of comprehensive input. Also finishing my part of the robotic arm (and I have a few other skills/projects I’d like to turn my attention to, soon). I’ll elaborate another day. 
 
 ### 2026-07-02
+
+Read 50 minutes once more, at a slightly slower pace though still respectable. And also started 10/10 Jikaku/Mining, hopefully this is worth it. About 10 cards is fine anyway for mining, and I’m not losing out a great deal. 
+
+I haven’t done anything of the engineering project today, or not much at least, but will do more tomorrow.
+
+Plans for tomorrow include a particular recipe I want to make, a 20 minute jog in the morning, 75 minutes of reading, and let’s say, some episode of something in Japanese while working out. Some mob psycho? Something simple like that or the little witch academia, etc. 
+
+Likewise play some sports like basketball or something, who knows. CIJ would also be good though it at times feel rather low. I’ll see where I can reach, or just watch all the videos till then anyway? I’m still in beginner I think.
+
+Also in the future I will use this table:
+
+
+| Medium    | Time (mins) | Time (hours) |
+|-----------|-------------|--------------|
+| Listening | xx          | xx           |
+| Reading   | xx          | xx             |
+
+
+### 2026-07-03
+
