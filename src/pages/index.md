@@ -19,7 +19,7 @@ Goals for the next day will be 1.5 hours of reading, 1.5 hours of watching, and 
 
 ### 2026-07-02
 
-Read 50 minutes once more, at a slightly slower pace though still respectable. And also started 10/10 Jikaku/Mining, hopefully this is worth it. About 10 cards is fine anyway for mining, and I’m not losing out a great deal. 
+Read 50 minutes once more, at a slightly slower pace though still respectable. And also started 10/10 Jikaku/Mining, hopefully this is worth it. About 10 cards is fine anyway for mining, and I’m not losing out a great deal. About 40 minutes of podcast, too. 
 
 I haven’t done anything of the engineering project today, or not much at least, but will do more tomorrow.
 
@@ -38,3 +38,8 @@ Also in the future I will use this table:
 
 ### 2026-07-03
 
+50 minutes of podcast and 50 of reading. Good for both, decent I guess, could do better. In any case I did 20 words total, same as yesterday. At a pace of about 3000 characters per day, I am about half done, but I’ve only been consistent for maybe a week? Not bad though. But 38k I think is what I’m at. 
+
+Read through lessons 1.1 and 1.2 of Townsend’s and tomorrow I plan to do 1.3 and 1.4, 1.5 or something, up the reading to 75, and the listening to 50 and 50 of a show… sheesh I hate watching… 
+
+Tomorrow I work on the materials of the arm to gauge the weight requirements and map out the modules of the drivers and actuators/motors plus their placement. I can do at least half of that. Maybe beginning to solidify our report outline would be good. Besides that, as much as I’d love to sculpt, it’s rather unviable, at least for the moment. I’ll come back to this. Overall a decent day. Not great; but doing better in some degree of consistency. 
