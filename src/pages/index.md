@@ -42,4 +42,15 @@ Also in the future I will use this table:
 
 Read through lessons 1.1 and 1.2 of Townsend’s and tomorrow I plan to do 1.3 and 1.4, 1.5 or something, up the reading to 75, and the listening to 50 and 50 of a show… sheesh I hate watching… 
 
-Tomorrow I work on the materials of the arm to gauge the weight requirements and map out the modules of the drivers and actuators/motors plus their placement. I can do at least half of that. Maybe beginning to solidify our report outline would be good. Besides that, as much as I’d love to sculpt, it’s rather unviable, at least for the moment. I’ll come back to this. Overall a decent day. Not great; but doing better in some degree of consistency. 
+Tomorrow I work on the materials of the arm to gauge the weight requirements and map out the modules of the drivers and actuators/motors plus their placement. I can do at least half of that. Maybe beginning to solidify our report outline would be good. Besides that, as much as I’d love to sculpt, it’s rather unviable, at least for the moment. I’ll come back to this. Overall a decent day. Not great; but doing better in some degree of consistency.  
+
+### 2026-07-04
+Nothing. Is that so? July 4th
+
+### 2026-07-05
+50 minutes of reading. That is all. Townsend 1.3 and starting 1.4. Very good?
+
+### 2026-07-06
+75 minutes of reading. Changing my audio strategy. YouTube content will be better. Longer and perhaps more enjoyable and will be able to start with more accessible content. Let’s see… and CIJ of course… Townsend finish chapter 1? And then… finish unfinished business tomorrow… do anki!!!!! And let’s see… 
+
+Ah yes, the robot arm. More work done. Shall show the progress soon.
