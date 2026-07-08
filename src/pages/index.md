@@ -54,3 +54,10 @@ Nothing. Is that so? July 4th
 75 minutes of reading. Changing my audio strategy. YouTube content will be better. Longer and perhaps more enjoyable and will be able to start with more accessible content. Let’s see… and CIJ of course… Townsend finish chapter 1? And then… finish unfinished business tomorrow… do anki!!!!! And let’s see… 
 
 Ah yes, the robot arm. More work done. Shall show the progress soon.
+
+### 2026-07-07
+2500 words ish, 1 hour err about, yes? Bit slow but who cares. 20 words, 30 minutes of podcast, sheesh, and also finished Townsend Ch 1, just need the problem questions. 
+
+On the topic of Townsend, I’m sure I’m getting everything but wow it’s somewhat conceptually difficult. It could be that the complex numbers haven’t quite clicked with me, but do they ever anyway? That and the relative phases. Will have to check. 
+
+### 2026-07-08
