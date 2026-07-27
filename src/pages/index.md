@@ -60,4 +60,7 @@ Ah yes, the robot arm. More work done. Shall show the progress soon.
 
 On the topic of Townsend, I’m sure I’m getting everything but wow it’s somewhat conceptually difficult. It could be that the complex numbers haven’t quite clicked with me, but do they ever anyway? That and the relative phases. Will have to check. 
 
-### 2026-07-08
+### 2026-07-26
+Many days later. Averaging around 3000-3100 characters per hour for the past few days. 220 words on anki. Not terrible. 25 days since I started anki, so I should have had… 500 words rn, but few days couldn’t do it, etc etc, not disappointed with the progress. I’m basically done with the book tomorrow. As for audio, errr not much. But! If I start doing say, I’m thinking calisthenics, that would be amazing for audio listening. I’m trying to get my workout routine in order still, basically. Comprehension hovers at a satisfying level. It’s not high at all, but I get a decent amount of comprehensible input from each episode. Though not the entire thing. It’s a bit hard, but one of my favorites anyway. Just chug through it. Goal is to finish that book, by July, and get good workout routine. I’ll talk more on method and techniques tomorrow. 
+
+### 2026-07-27
