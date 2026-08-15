@@ -85,3 +85,10 @@ blockquote {
 .more-metrics summary {
   cursor: pointer;
 }
+
+article h2 {
+  font-size: 1rem;
+  font-weight: bold;
+  margin-top: 1.25em;
+  margin-bottom: 0.75em;
+}
