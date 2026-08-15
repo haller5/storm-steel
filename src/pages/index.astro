@@ -1,0 +1,286 @@
+---
+import fs from 'node:fs';
+import path from 'node:path';
+import { marked } from 'marked';
+import { load as parseYaml } from 'js-yaml';
+import '../styles/global.css';
+
+const raw = fs.readFileSync(path.resolve('./src/log.md'), 'utf-8');
+
+// Remove optional frontmatter and hide ```log blocks from the visible writing.
+const markdownBody = raw.replace(/^---[\s\S]*?---\s*/, '');
+const visibleMarkdown = markdownBody.replace(/```log[\s\S]*?```/g, '').trim();
+const html = marked.parse(visibleMarkdown);
+
+// Parse dated sections like: ## 2026-08-15
+const sectionRegex = /##\s+(\d{4}-\d{2}-\d{2})([^\n]*)\n([\s\S]*?)(?=\n##\s+\d{4}-\d{2}-\d{2}|$)/g;
+
+const records = [...markdownBody.matchAll(sectionRegex)]
+  .map((match) => {
+    const date = match[1];
+    const section = match[3];
+    const logMatch = section.match(/```log\s*([\s\S]*?)```/);
+
+    if (!logMatch) return null;
+
+    const data = parseYaml(logMatch[1]) ?? {};
+
+    const listen_min = Number(data.listen_min ?? 0);
+    const read_min = Number(data.read_min ?? 0);
+    const read_chars = Number(data.read_chars ?? 0);
+
+    const total_input_min = listen_min + read_min;
+    const load = listen_min + 1.2 * read_min;
+    const contact_day = total_input_min > 0;
+    const frictionless_minimum = total_input_min >= 5;
+    const active_day = load >= 30;
+    const reading_density = read_min > 0 ? read_chars / read_min : null;
+
+    return {
+      date,
+      listen_min,
+      read_min,
+      read_chars,
+      total_input_min,
+      load,
+      contact_day,
+      frictionless_minimum,
+      active_day,
+      reading_density,
+    };
+  })
+  .filter(Boolean)
+  .sort((a, b) => a.date.localeCompare(b.date));
+
+function addDays(dateString, days) {
+  const date = new Date(`${dateString}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function daysBetween(start, end) {
+  const a = new Date(`${start}T00:00:00Z`);
+  const b = new Date(`${end}T00:00:00Z`);
+  return Math.round((b - a) / 86400000);
+}
+
+function average(items, key) {
+  if (!items.length) return 0;
+  return items.reduce((sum, item) => sum + Number(item[key] ?? 0), 0) / items.length;
+}
+
+function sum(items, key) {
+  return items.reduce((total, item) => total + Number(item[key] ?? 0), 0);
+}
+
+function stddev(values) {
+  if (!values.length) return 0;
+  const avg = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((total, value) => total + (value - avg) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
+function safeRatio(a, b) {
+  return b === 0 ? 0 : a / b;
+}
+
+function bar(value, max, width = 18) {
+  const filled = max <= 0 ? 0 : Math.round((value / max) * width);
+  return '█'.repeat(filled) + '░'.repeat(width - filled);
+}
+
+const latestDate = records.at(-1)?.date ?? new Date().toISOString().slice(0, 10);
+const firstDate = records.at(0)?.date ?? latestDate;
+const byDate = new Map(records.map((record) => [record.date, record]));
+
+// Fill missing dates with zeroes so skipped days count.
+const days = Array.from({ length: daysBetween(firstDate, latestDate) + 1 }, (_, index) => {
+  const date = addDays(firstDate, index);
+
+  return byDate.get(date) ?? {
+    date,
+    listen_min: 0,
+    read_min: 0,
+    read_chars: 0,
+    total_input_min: 0,
+    load: 0,
+    contact_day: false,
+    frictionless_minimum: false,
+    active_day: false,
+    reading_density: null,
+  };
+});
+
+const last7 = days.slice(-7);
+const previous7 = days.slice(-14, -7);
+const last14 = days.slice(-14);
+const last30 = days.slice(-30);
+const last3 = days.slice(-3);
+const previous7BeforeLast3 = days.slice(-10, -3);
+
+const loadToday = days.at(-1)?.load ?? 0;
+
+const rolling7 = average(last7, 'load');
+const rolling14 = average(last14, 'load');
+
+const activeDays7 = last7.filter((day) => day.active_day).length;
+const activeDays14 = last14.filter((day) => day.active_day).length;
+const consistency7 = activeDays7 / 7;
+const consistency14 = activeDays14 / 14;
+
+const contactDays30 = last30.filter((day) => day.contact_day).length;
+const frictionlessDays30 = last30.filter((day) => day.frictionless_minimum).length;
+
+const effectiveConsistency = rolling7 * consistency7;
+
+const avgLast3 = average(last3, 'load');
+const avgPrevious7BeforeLast3 = average(previous7BeforeLast3, 'load');
+const momentum = safeRatio(avgLast3, avgPrevious7BeforeLast3);
+
+const volatility = stddev(last14.map((day) => day.load));
+const instability = safeRatio(volatility, rolling14);
+
+const weeklyListen = sum(last7, 'listen_min');
+const weeklyRead = sum(last7, 'read_min');
+const weeklyInput = weeklyListen + weeklyRead;
+
+const weeklyListeningPct = weeklyInput > 0 ? (weeklyListen / weeklyInput) * 100 : 0;
+const weeklyReadingPct = weeklyInput > 0 ? (weeklyRead / weeklyInput) * 100 : 0;
+
+// Target: 70% listening, 30% reading.
+const balanceError = Math.abs(weeklyListeningPct - 70) + Math.abs(weeklyReadingPct - 30);
+const balanceScore = Math.max(0, 100 - balanceError);
+
+function daysSince(metric) {
+  for (let i = days.length - 1; i >= 0; i--) {
+    if (days[i][metric] > 0) return days.length - 1 - i;
+  }
+
+  return null;
+}
+
+const daysSinceListen = daysSince('listen_min');
+const daysSinceRead = daysSince('read_min');
+
+const neglectPenalty =
+  1.0 * (daysSinceListen ?? days.length) +
+  1.2 * (daysSinceRead ?? days.length);
+
+const readingDaysLast7 = last7.filter((day) => day.read_min >= 10 && day.reading_density !== null);
+const readingDaysPrevious7 = previous7.filter((day) => day.read_min >= 10 && day.reading_density !== null);
+
+const readingFluency7 = readingDaysLast7.length
+  ? readingDaysLast7.reduce((total, day) => total + day.reading_density, 0) / readingDaysLast7.length
+  : 0;
+
+const readingFluencyPrevious7 = readingDaysPrevious7.length
+  ? readingDaysPrevious7.reduce((total, day) => total + day.reading_density, 0) / readingDaysPrevious7.length
+  : 0;
+
+const readingFluencyTrend = readingFluency7 - readingFluencyPrevious7;
+
+const latestReadingDensity = [...days]
+  .reverse()
+  .find((day) => day.reading_density !== null)?.reading_density ?? 0;
+
+const maxLoad = Math.max(...last14.map((day) => day.load), 1);
+
+const dailyLoadChart = last14
+  .map((day) => {
+    const label = day.date.slice(5);
+    return `${label} ${bar(day.load, maxLoad)} ${Math.round(day.load)}`;
+  })
+  .join('\n');
+
+const contactStrip = last30
+  .map((day) => {
+    if (day.active_day) return '█';
+    if (day.frictionless_minimum) return '▒';
+    if (day.contact_day) return '░';
+    return '_';
+  })
+  .join(' ');
+
+const balanceChart = [
+  `listen ${bar(weeklyListeningPct, 100)} ${Math.round(weeklyListeningPct)}%`,
+  `read   ${bar(weeklyReadingPct, 100)} ${Math.round(weeklyReadingPct)}%`,
+].join('\n');
+
+function formatNumber(value, digits = 1) {
+  if (!Number.isFinite(value)) return '0';
+  return value.toFixed(digits);
+}
+
+function formatDays(value) {
+  if (value === null) return 'never';
+  if (value === 0) return 'today';
+  if (value === 1) return '1d';
+  return `${value}d`;
+}
+
+function momentumLabel(value) {
+  if (value >= 1.1) return 'rising';
+  if (value <= 0.9) return 'fading';
+  return 'stable';
+}
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>storm-steel</title>
+  </head>
+
+  <body>
+    <main>
+      <section class="instruments">
+        <h1>storm-steel</h1>
+
+        <pre>{`instruments
+
+load today              ${Math.round(loadToday)}
+load 7d avg             ${formatNumber(rolling7)}
+load 14d avg            ${formatNumber(rolling14)}
+
+consistency 7d          ${activeDays7}/7
+consistency 14d         ${activeDays14}/14
+effective consistency   ${formatNumber(effectiveConsistency)}
+
+contact 30d             ${contactDays30}/30
+frictionless 30d        ${frictionlessDays30}/30
+
+momentum                ${formatNumber(momentum, 2)} ${momentumLabel(momentum)}
+volatility              ${formatNumber(volatility)}
+instability             ${formatNumber(instability, 2)}
+
+balance                 ${Math.round(weeklyListeningPct)}L / ${Math.round(weeklyReadingPct)}R
+balance error           ${formatNumber(balanceError)}
+balance score           ${formatNumber(balanceScore)}
+
+reading density         ${formatNumber(latestReadingDensity)} chars/min
+reading fluency 7d      ${formatNumber(readingFluency7)} chars/min
+reading fluency trend   ${readingFluencyTrend >= 0 ? '+' : ''}${formatNumber(readingFluencyTrend)} chars/min
+
+last listen             ${formatDays(daysSinceListen)}
+last read               ${formatDays(daysSinceRead)}
+neglect penalty         ${formatNumber(neglectPenalty)}
+`}</pre>
+
+        <h2>load</h2>
+        <pre>{dailyLoadChart}</pre>
+
+        <h2>contact</h2>
+        <pre>{contactStrip}</pre>
+
+        <h2>balance</h2>
+        <pre>{balanceChart}</pre>
+      </section>
+
+      <hr />
+
+      <article set:html={html} />
+    </main>
+  </body>
+</html>
