@@ -307,6 +307,25 @@ const rollingPointGraph = pointGraph(
   chartDays.map((day) => day.date.slice(5))
 );
 
+function fluencyTitle(charsPerMin) {
+  if (charsPerMin <= 0) return '—';
+  if (charsPerMin < 15) return 'ember';
+  if (charsPerMin < 30) return 'ash';
+  if (charsPerMin < 50) return 'spark';
+  if (charsPerMin < 75) return 'kindling';
+  if (charsPerMin < 100) return 'flame';
+  if (charsPerMin < 140) return 'iron';
+  if (charsPerMin < 190) return 'steel';
+  if (charsPerMin < 250) return 'blade';
+  if (charsPerMin < 325) return 'edge';
+  if (charsPerMin < 425) return 'stride';
+  if (charsPerMin < 550) return 'current';
+  if (charsPerMin < 700) return 'torrent';
+  if (charsPerMin < 900) return 'native';
+  if (charsPerMin < 1200) return 'swift';
+  return 'storm';
+}
+
 ---
 
 <!doctype html>
@@ -328,7 +347,10 @@ const rollingPointGraph = pointGraph(
     <p><span>consistency</span><strong>{activeDays7}/7</strong></p>
     <p><span>contact</span><strong>{contactDays30}/30</strong></p>
     <p><span>balance</span><strong>{Math.round(weeklyListeningPct)}L / {Math.round(weeklyReadingPct)}R</strong></p>
-    <p><span>reading fluency</span><strong>{formatNumber(readingFluency7)} c/m</strong></p>
+    <p>
+  <span>reading fluency</span>
+  <strong>{fluencyTitle(readingFluency7)}</strong>
+</p>
 <p>
   <span>fluency momentum</span>
   <strong>{formatNumber(fluencyMomentum, 2)} {momentumLabel(fluencyMomentum)}</strong>
