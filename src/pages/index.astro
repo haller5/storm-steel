@@ -30,10 +30,10 @@ const records = [...markdownBody.matchAll(sectionRegex)]
     const read_chars = Number(data.read_chars ?? 0);
 
     const total_input_min = listen_min + read_min;
-    const load = listen_min + 1.2 * read_min;
+    const input = total_input_min;
     const contact_day = total_input_min > 0;
     const frictionless_minimum = total_input_min >= 5;
-    const active_day = load >= 30;
+    const active_day = input >= 30;
     const reading_density = read_min > 0 ? read_chars / read_min : null;
 
     return {
@@ -42,7 +42,7 @@ const records = [...markdownBody.matchAll(sectionRegex)]
       read_min,
       read_chars,
       total_input_min,
-      load,
+      input,
       contact_day,
       frictionless_minimum,
       active_day,
@@ -103,7 +103,7 @@ const days = Array.from({ length: daysBetween(firstDate, latestDate) + 1 }, (_, 
     read_min: 0,
     read_chars: 0,
     total_input_min: 0,
-    load: 0,
+    input: 0,
     contact_day: false,
     frictionless_minimum: false,
     active_day: false,
@@ -118,10 +118,10 @@ const last30 = days.slice(-30);
 const last3 = days.slice(-3);
 const previous7BeforeLast3 = days.slice(-10, -3);
 
-const loadToday = days.at(-1)?.load ?? 0;
+const inputToday = days.at(-1)?.input ?? 0;
 
-const rolling7 = average(last7, 'load');
-const rolling14 = average(last14, 'load');
+const rolling7 = average(last7, 'input');
+const rolling14 = average(last14, 'input');
 
 const activeDays7 = last7.filter((day) => day.active_day).length;
 const activeDays14 = last14.filter((day) => day.active_day).length;
@@ -133,11 +133,11 @@ const frictionlessDays30 = last30.filter((day) => day.frictionless_minimum).leng
 
 const effectiveConsistency = rolling7 * consistency7;
 
-const avgLast3 = average(last3, 'load');
-const avgPrevious7BeforeLast3 = average(previous7BeforeLast3, 'load');
+const avgLast3 = average(last3, 'input');
+const avgPrevious7BeforeLast3 = average(previous7BeforeLast3, 'input');
 const momentum = safeRatio(avgLast3, avgPrevious7BeforeLast3);
 
-const volatility = stddev(last14.map((day) => day.load));
+const volatility = stddev(last14.map((day) => day.input));
 const instability = safeRatio(volatility, rolling14);
 
 const weeklyListen = sum(last7, 'listen_min');
@@ -223,6 +223,51 @@ function momentumLabel(value) {
   if (value <= 0.9) return 'fading';
   return 'stable';
 }
+
+const chartDays = days.slice(-14);
+
+const rollingSeries14 = chartDays.map((_, index) => {
+  const end = days.length - 14 + index + 1;
+  const start = Math.max(0, end - 7);
+  return average(days.slice(start, end), 'input');
+});
+
+function pointGraph(values, labels, height = 8, width = 28) {
+  const max = Math.max(...values, 1);
+  const min = 0;
+
+  const rows = [];
+
+  for (let y = height; y >= 0; y--) {
+    const threshold = min + ((max - min) * y) / height;
+    const label = String(Math.round(threshold)).padStart(4, ' ');
+
+    let row = `${label} | `;
+
+    for (const value of values) {
+      const pointY = Math.round((value / max) * height);
+      row += pointY === y ? '* ' : '  ';
+    }
+
+    rows.push(row);
+  }
+
+  rows.push('     +' + '-'.repeat(values.length * 2 + 1));
+  rows.push('      ' + labels.map((label) => label.slice(3)).join(' '));
+
+  return rows.join('\n');
+}
+
+const inputPointGraph = pointGraph(
+  chartDays.map((day) => day.input),
+  chartDays.map((day) => day.date.slice(5))
+);
+
+const rollingPointGraph = pointGraph(
+  rollingSeries14,
+  chartDays.map((day) => day.date.slice(5))
+);
+
 ---
 
 <!doctype html>
@@ -235,49 +280,66 @@ function momentumLabel(value) {
 
   <body>
     <main>
-      <section class="instruments">
-        <h1>storm-steel</h1>
+<section class="instruments">
+  <h1>storm-steel</h1>
 
-        <pre>{`instruments
+  <p class="plain-label">overview</p>
+  <div class="summary">
+    <p><span>7d input</span><strong>{formatNumber(rolling7)}m</strong></p>
+    <p><span>consistency</span><strong>{activeDays7}/7</strong></p>
+    <p><span>contact</span><strong>{contactDays30}/30</strong></p>
+    <p><span>balance</span><strong>{Math.round(weeklyListeningPct)}L / {Math.round(weeklyReadingPct)}R</strong></p>
+    <p><span>reading fluency</span><strong>{formatNumber(readingFluency7)} c/m</strong></p>
+  </div>
 
-load today              ${Math.round(loadToday)}
-load 7d avg             ${formatNumber(rolling7)}
-load 14d avg            ${formatNumber(rolling14)}
+  <p class="plain-label">input minutes</p>
+  <pre>{inputPointGraph}</pre>
 
-consistency 7d          ${activeDays7}/7
-consistency 14d         ${activeDays14}/14
-effective consistency   ${formatNumber(effectiveConsistency)}
+  <p class="plain-label">7d rolling average</p>
+  <pre>{rollingPointGraph}</pre>
 
-contact 30d             ${contactDays30}/30
-frictionless 30d        ${frictionlessDays30}/30
+  <p class="plain-label">contact</p>
+  <pre class="strip">{contactStrip}</pre>
+  <p class="muted">
+    {contactDays30}/30 contact · {frictionlessDays30}/30 frictionless minimum
+  </p>
 
-momentum                ${formatNumber(momentum, 2)} ${momentumLabel(momentum)}
-volatility              ${formatNumber(volatility)}
-instability             ${formatNumber(instability, 2)}
+  <p class="plain-label">balance</p>
+  <div class="balance-bar" aria-label="listening and reading balance">
+    <div
+      class="balance-listen"
+      style={`width:${weeklyListeningPct}%`}
+    ></div>
+    <div
+      class="balance-read"
+      style={`width:${weeklyReadingPct}%`}
+    ></div>
+  </div>
+  <p class="muted">
+    {Math.round(weeklyListeningPct)}% listen ·
+    {Math.round(weeklyReadingPct)}% read ·
+    error {formatNumber(balanceError)}
+  </p>
 
-balance                 ${Math.round(weeklyListeningPct)}L / ${Math.round(weeklyReadingPct)}R
-balance error           ${formatNumber(balanceError)}
-balance score           ${formatNumber(balanceScore)}
+  <details class="more-metrics">
+    <summary>more</summary>
+    <pre>{`input today           ${Math.round(inputToday)}m
+input 14d avg         ${formatNumber(rolling14)}m
 
-reading density         ${formatNumber(latestReadingDensity)} chars/min
-reading fluency 7d      ${formatNumber(readingFluency7)} chars/min
-reading fluency trend   ${readingFluencyTrend >= 0 ? '+' : ''}${formatNumber(readingFluencyTrend)} chars/min
+momentum              ${formatNumber(momentum, 2)} ${momentumLabel(momentum)}
+volatility            ${formatNumber(volatility)}
+instability           ${formatNumber(instability, 2)}
+effective consistency ${formatNumber(effectiveConsistency)}
 
-last listen             ${formatDays(daysSinceListen)}
-last read               ${formatDays(daysSinceRead)}
-neglect penalty         ${formatNumber(neglectPenalty)}
+reading density       ${formatNumber(latestReadingDensity)} chars/min
+reading trend         ${readingFluencyTrend >= 0 ? '+' : ''}${formatNumber(readingFluencyTrend)} chars/min
+
+last listen           ${formatDays(daysSinceListen)}
+last read             ${formatDays(daysSinceRead)}
+neglect penalty       ${formatNumber(neglectPenalty)}
 `}</pre>
-
-        <h2>load</h2>
-        <pre>{dailyLoadChart}</pre>
-
-        <h2>contact</h2>
-        <pre>{contactStrip}</pre>
-
-        <h2>balance</h2>
-        <pre>{balanceChart}</pre>
-      </section>
-
+  </details>
+</section>
       <hr />
 
       <article set:html={html} />

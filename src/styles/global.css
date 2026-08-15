@@ -13,19 +13,75 @@ pre {
   white-space: pre;
 }
 
-.instruments h1 {
-  margin-bottom: 0;
-}
-
-.instruments h2 {
-  margin-top: 1.5em;
-  margin-bottom: 0.25em;
-}
-
 hr {
   margin: 2em 0;
 }
 
 blockquote {
   margin-left: 1.5em;
+}
+
+.instruments h1 {
+  margin-bottom: 0.25em;
+}
+
+.plain-label {
+  margin-top: 1.25em;
+  margin-bottom: 0.4em;
+  font-size: 1rem;
+  font-weight: normal;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.3em 1.2em;
+}
+
+.summary p {
+  margin: 0;
+}
+
+.summary span {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.summary strong {
+  font-size: 1.1rem;
+  font-weight: bold;
+}
+
+.muted {
+  margin-top: 0.35em;
+  font-size: 0.95rem;
+}
+
+.strip {
+  margin: 0;
+}
+
+.balance-bar {
+  display: flex;
+  width: 100%;
+  max-width: 420px;
+  height: 16px;
+  border: 1px solid black;
+  margin-top: 0.25em;
+}
+
+.balance-listen {
+  background: black;
+}
+
+.balance-read {
+  background: #d9d9d9;
+}
+
+.more-metrics {
+  margin-top: 1em;
+}
+
+.more-metrics summary {
+  cursor: pointer;
 }
