@@ -162,10 +162,6 @@ function daysSince(metric) {
 const daysSinceListen = daysSince('listen_min');
 const daysSinceRead = daysSince('read_min');
 
-const neglectPenalty =
-  1.0 * (daysSinceListen ?? days.length) +
-  1.2 * (daysSinceRead ?? days.length);
-
 const readingDaysLast7 = last7.filter((day) => day.read_min >= 10 && day.reading_density !== null);
 const readingDaysPrevious7 = previous7.filter((day) => day.read_min >= 10 && day.reading_density !== null);
 
@@ -178,6 +174,26 @@ const readingFluencyPrevious7 = readingDaysPrevious7.length
   : 0;
 
 const readingFluencyTrend = readingFluency7 - readingFluencyPrevious7;
+
+const readingSessions = days.filter(
+  (day) => day.read_min >= 10 && day.reading_density !== null
+);
+
+const last3ReadingSessions = readingSessions.slice(-3);
+const previous7ReadingSessions = readingSessions.slice(-10, -3);
+
+function averageReadingDensity(sessions) {
+  if (!sessions.length) return 0;
+
+  return (
+    sessions.reduce((total, day) => total + day.reading_density, 0) /
+    sessions.length
+  );
+}
+
+const fluencyLast3 = averageReadingDensity(last3ReadingSessions);
+const fluencyPrevious7 = averageReadingDensity(previous7ReadingSessions);
+const fluencyMomentum = safeRatio(fluencyLast3, fluencyPrevious7);
 
 const latestReadingDensity = [...days]
   .reverse()
@@ -222,6 +238,18 @@ function momentumLabel(value) {
   if (value >= 1.1) return 'rising';
   if (value <= 0.9) return 'fading';
   return 'stable';
+}
+
+function volatilityLabel(value) {
+  if (value <= 10) return 'steady';
+  if (value <= 30) return 'uneven';
+  return 'volatile';
+}
+
+function instabilityLabel(value) {
+  if (value <= 0.3) return 'stable';
+  if (value <= 0.7) return 'uneven';
+  return 'chaotic';
 }
 
 const chartDays = days.slice(-14);
@@ -290,6 +318,10 @@ const rollingPointGraph = pointGraph(
     <p><span>contact</span><strong>{contactDays30}/30</strong></p>
     <p><span>balance</span><strong>{Math.round(weeklyListeningPct)}L / {Math.round(weeklyReadingPct)}R</strong></p>
     <p><span>reading fluency</span><strong>{formatNumber(readingFluency7)} c/m</strong></p>
+<p>
+  <span>fluency momentum</span>
+  <strong>{formatNumber(fluencyMomentum, 2)} {momentumLabel(fluencyMomentum)}</strong>
+</p>
   </div>
 
   <p class="plain-label">input minutes</p>
@@ -327,16 +359,18 @@ const rollingPointGraph = pointGraph(
 input 14d avg         ${formatNumber(rolling14)}m
 
 momentum              ${formatNumber(momentum, 2)} ${momentumLabel(momentum)}
-volatility            ${formatNumber(volatility)}
-instability           ${formatNumber(instability, 2)}
+volatility            ${formatNumber(volatility)} ${volatilityLabel(volatility)}
+instability           ${formatNumber(instability, 2)} ${instabilityLabel(instability)}
 effective consistency ${formatNumber(effectiveConsistency)}
 
 reading density       ${formatNumber(latestReadingDensity)} chars/min
 reading trend         ${readingFluencyTrend >= 0 ? '+' : ''}${formatNumber(readingFluencyTrend)} chars/min
+fluency last 3        ${formatNumber(fluencyLast3)} chars/min
+fluency previous 7    ${formatNumber(fluencyPrevious7)} chars/min
+fluency momentum      ${formatNumber(fluencyMomentum, 2)} ${momentumLabel(fluencyMomentum)}
 
 last listen           ${formatDays(daysSinceListen)}
 last read             ${formatDays(daysSinceRead)}
-neglect penalty       ${formatNumber(neglectPenalty)}
 `}</pre>
   </details>
 </section>
