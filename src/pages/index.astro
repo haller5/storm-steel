@@ -260,7 +260,7 @@ const rollingSeries14 = chartDays.map((_, index) => {
   return average(days.slice(start, end), 'input');
 });
 
-function pointGraph(values, labels, height = 8, width = 28) {
+function pointGraph(values, labels, height = 8, xStep = 5) {
   const max = Math.max(...values, 1);
   const min = 0;
 
@@ -268,20 +268,31 @@ function pointGraph(values, labels, height = 8, width = 28) {
 
   for (let y = height; y >= 0; y--) {
     const threshold = min + ((max - min) * y) / height;
-    const label = String(Math.round(threshold)).padStart(4, ' ');
+    const yLabel = String(Math.round(threshold)).padStart(4, ' ');
 
-    let row = `${label} | `;
+    let row = `${yLabel} | `;
 
     for (const value of values) {
       const pointY = Math.round((value / max) * height);
-      row += pointY === y ? '* ' : '  ';
+
+      if (pointY === y) {
+        row += '*'.padEnd(xStep, ' ');
+      } else {
+        row += ''.padEnd(xStep, ' ');
+      }
     }
 
     rows.push(row);
   }
 
-  rows.push('     +' + '-'.repeat(values.length * 2 + 1));
-  rows.push('      ' + labels.map((label) => label.slice(3)).join(' '));
+  rows.push('     +' + '-'.repeat(values.length * xStep + 1));
+
+  rows.push(
+    '      ' +
+      labels
+        .map((label) => label.slice(3).padEnd(xStep, ' '))
+        .join('')
+  );
 
   return rows.join('\n');
 }
