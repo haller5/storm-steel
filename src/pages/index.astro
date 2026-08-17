@@ -33,7 +33,6 @@ const records = [...markdownBody.matchAll(sectionRegex)]
     const input = total_input_min;
     const contact_day = total_input_min > 0;
     const frictionless_minimum = total_input_min >= 5;
-    const active_day = input >= 30;
     const reading_density = read_min > 0 ? read_chars / read_min : null;
 
     return {
@@ -45,7 +44,6 @@ const records = [...markdownBody.matchAll(sectionRegex)]
       input,
       contact_day,
       frictionless_minimum,
-      active_day,
       reading_density,
     };
   })
@@ -84,11 +82,6 @@ function safeRatio(a, b) {
   return b === 0 ? 0 : a / b;
 }
 
-function bar(value, max, width = 18) {
-  const filled = max <= 0 ? 0 : Math.round((value / max) * width);
-  return '█'.repeat(filled) + '░'.repeat(width - filled);
-}
-
 const latestDate = records.at(-1)?.date ?? new Date().toISOString().slice(0, 10);
 const firstDate = records.at(0)?.date ?? latestDate;
 const byDate = new Map(records.map((record) => [record.date, record]));
@@ -106,7 +99,6 @@ const days = Array.from({ length: daysBetween(firstDate, latestDate) + 1 }, (_, 
     input: 0,
     contact_day: false,
     frictionless_minimum: false,
-    active_day: false,
     reading_density: null,
   };
 });
@@ -123,15 +115,8 @@ const inputToday = days.at(-1)?.input ?? 0;
 const rolling7 = average(last7, 'input');
 const rolling14 = average(last14, 'input');
 
-const activeDays7 = last7.filter((day) => day.active_day).length;
-const activeDays14 = last14.filter((day) => day.active_day).length;
-const consistency7 = activeDays7 / 7;
-const consistency14 = activeDays14 / 14;
-
 const contactDays30 = last30.filter((day) => day.contact_day).length;
 const frictionlessDays30 = last30.filter((day) => day.frictionless_minimum).length;
-
-const effectiveConsistency = rolling7 * consistency7;
 
 const avgLast3 = average(last3, 'input');
 const avgPrevious7BeforeLast3 = average(previous7BeforeLast3, 'input');
@@ -149,7 +134,17 @@ const weeklyReadingPct = weeklyInput > 0 ? (weeklyRead / weeklyInput) * 100 : 0;
 
 // Target: 70% listening, 30% reading.
 const balanceError = Math.abs(weeklyListeningPct - 70) + Math.abs(weeklyReadingPct - 30);
-const balanceScore = Math.max(0, 100 - balanceError);
+
+function currentStreak(list, key) {
+  let streak = 0;
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i][key]) streak++;
+    else break;
+  }
+  return streak;
+}
+
+const contactStreak = currentStreak(days, 'contact_day');
 
 function daysSince(metric) {
   for (let i = days.length - 1; i >= 0; i--) {
@@ -199,29 +194,6 @@ const latestReadingDensity = [...days]
   .reverse()
   .find((day) => day.reading_density !== null)?.reading_density ?? 0;
 
-const maxLoad = Math.max(...last14.map((day) => day.load), 1);
-
-const dailyLoadChart = last14
-  .map((day) => {
-    const label = day.date.slice(5);
-    return `${label} ${bar(day.load, maxLoad)} ${Math.round(day.load)}`;
-  })
-  .join('\n');
-
-const contactStrip = last30
-  .map((day) => {
-    if (day.active_day) return '█';
-    if (day.frictionless_minimum) return '▒';
-    if (day.contact_day) return '░';
-    return '_';
-  })
-  .join(' ');
-
-const balanceChart = [
-  `listen ${bar(weeklyListeningPct, 100)} ${Math.round(weeklyListeningPct)}%`,
-  `read   ${bar(weeklyReadingPct, 100)} ${Math.round(weeklyReadingPct)}%`,
-].join('\n');
-
 function formatNumber(value, digits = 1) {
   if (!Number.isFinite(value)) return '0';
   return value.toFixed(digits);
@@ -260,70 +232,152 @@ const rollingSeries14 = chartDays.map((_, index) => {
   return average(days.slice(start, end), 'input');
 });
 
-function pointGraph(values, labels, height = 8, xStep = 5) {
+const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
+function svgLineChart(values, labels, opts = {}) {
+  const {
+    width = 640,
+    height = 260,
+    padLeft = 32,
+    padRight = 12,
+    padTop = 14,
+    padBottom = 24,
+    color = '#48545e',
+    showDots = true,
+    yTicks = 5,
+  } = opts;
+
+  const innerW = width - padLeft - padRight;
+  const innerH = height - padTop - padBottom;
   const max = Math.max(...values, 1);
-  const min = 0;
 
-  const rows = [];
+  const x = (i) => padLeft + (values.length <= 1 ? 0 : (i / (values.length - 1)) * innerW);
+  const y = (v) => padTop + innerH - (v / max) * innerH;
 
-  for (let y = height; y >= 0; y--) {
-    const threshold = min + ((max - min) * y) / height;
-    const yLabel = String(Math.round(threshold)).padStart(4, ' ');
+  const points = values.map((v, i) => [x(i), y(v)]);
+  const linePath = points
+    .map(([px, py], i) => `${i === 0 ? 'M' : 'L'}${px.toFixed(1)},${py.toFixed(1)}`)
+    .join(' ');
 
-    let row = `${yLabel} | `;
+  // Baseline (0) drawn bolder, like the old ascii chart's "+----" rule; the rest stay light.
+  const gridLines = Array.from({ length: yTicks + 1 }, (_, i) => {
+    const value = (max / yTicks) * i;
+    const gy = y(value);
+    const isBaseline = i === 0;
+    return `<line x1="${padLeft}" y1="${gy.toFixed(1)}" x2="${width - padRight}" y2="${gy.toFixed(1)}" stroke="${isBaseline ? '#48545e' : '#d6d9d2'}" stroke-width="${isBaseline ? 1.4 : 1}" />
+<text x="${padLeft - 6}" y="${(gy + 3).toFixed(1)}" text-anchor="end" font-size="10" font-family="${MONO}" fill="#48545e">${Math.round(value)}</text>`;
+  }).join('');
 
-    for (const value of values) {
-      const pointY = Math.round((value / max) * height);
-
-      if (pointY === y) {
-        row += '*'.padEnd(xStep, ' ');
-      } else {
-        row += ''.padEnd(xStep, ' ');
-      }
-    }
-
-    rows.push(row);
-  }
-
-  rows.push('     +' + '-'.repeat(values.length * xStep + 1));
-
-  rows.push(
-    '      ' +
-      labels
-        .map((label) => label.slice(3).padEnd(xStep, ' '))
+  // Points are literal asterisks (text glyphs), not circles — a callback to
+  // the original hand-plotted "*" chart, just no longer locked to a fixed
+  // monospace grid.
+  const dots = showDots
+    ? points
+        .map(([px, py]) => {
+          return `<text x="${px.toFixed(1)}" y="${py.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-family="${MONO}" font-size="17" font-weight="700" fill="${color}">*</text>`;
+        })
         .join('')
-  );
+    : '';
 
-  return rows.join('\n');
+  const xLabels = labels
+    .map((label, i) => {
+      if (labels.length > 8 && i % 2 !== 0) return '';
+      return `<text x="${x(i).toFixed(1)}" y="${height - 6}" text-anchor="middle" font-size="10" font-family="${MONO}" fill="#48545e">${label}</text>`;
+    })
+    .join('');
+
+  return `<svg viewBox="0 0 ${width} ${height}" class="chart-svg" role="img" aria-label="chart" preserveAspectRatio="xMidYMid meet">
+  ${gridLines}
+  <path d="${linePath}" fill="none" stroke="${color}" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" />
+  ${dots}
+  ${xLabels}
+</svg>`;
 }
 
-const inputPointGraph = pointGraph(
+const inputChartSvg = svgLineChart(
   chartDays.map((day) => day.input),
   chartDays.map((day) => day.date.slice(5))
 );
 
-const rollingPointGraph = pointGraph(
+const rollingChartSvg = svgLineChart(
   rollingSeries14,
-  chartDays.map((day) => day.date.slice(5))
+  chartDays.map((day) => day.date.slice(5)),
+  { showDots: false }
 );
 
-function fluencyTitle(charsPerMin) {
-  if (charsPerMin <= 0) return '—';
-  if (charsPerMin < 15) return '(•‿•) flutter I';
-  if (charsPerMin < 30) return '( •_•) flutter II';
-  if (charsPerMin < 50) return '( •̀_•́ ) wind I';
-  if (charsPerMin < 75) return '(ง •̀_•́)ง wind II';
-  if (charsPerMin < 100) return '(｀_´) hail I';
-  if (charsPerMin < 140) return '(¬_¬) hail II';
-  if (charsPerMin < 190) return '(ಠ_ಠ) gale I';
-  if (charsPerMin < 250) return "(ง'̀-'́)ง gale II";
-  if (charsPerMin < 325) return '(◉_◉) torrent I';
-  if (charsPerMin < 425) return '(ง •̀_•́) torrent II';
-  if (charsPerMin < 550) return '( •̀_•́) tempest I';
-  if (charsPerMin < 700) return '(╯°□°）╯ tempest II';
-  if (charsPerMin < 900) return '(￣^￣)ゞ storm I';
-  if (charsPerMin < 1200) return '(✧_✧) storm II';
-  return 'ฅ(=✧ω✧=)ฅ STURM UND DRANG';
+const fluencyTiers = [
+  { max: 0, label: '—', color: '#8b9498' },
+  { max: 15, label: '(•‿•) flutter I', color: '#6f93a3' },
+  { max: 30, label: '( •_•) flutter II', color: '#5f8697' },
+  { max: 50, label: '( •̀_•́ ) wind I', color: '#4f7a8c' },
+  { max: 75, label: '(ง •̀_•́)ง wind II', color: '#3f6b7c' },
+  { max: 100, label: '(｀_´) hail I', color: '#6f7a5f' },
+  { max: 140, label: '(¬_¬) hail II', color: '#7c8a4f' },
+  { max: 190, label: '(ಠ_ಠ) gale I', color: '#8f8a3f' },
+  { max: 250, label: "(ง'̀-'́)ง gale II", color: '#a3853f' },
+  { max: 325, label: '(◉_◉) torrent I', color: '#b5751b' },
+  { max: 425, label: '(ง •̀_•́) torrent II', color: '#b06229' },
+  { max: 550, label: '( •̀_•́) tempest I', color: '#a94f2f' },
+  { max: 700, label: '(╯°□°）╯ tempest II', color: '#a13f3a' },
+  { max: 900, label: '(￣^￣)ゞ storm I', color: '#93384a' },
+  { max: 1200, label: '(✧_✧) storm II', color: '#7d3560' },
+  { max: Infinity, label: 'ฅ(=✧ω✧=)ฅ STURM UND DRANG', color: '#5c2e73' },
+];
+
+function fluencyTier(charsPerMin) {
+  if (charsPerMin <= 0) return fluencyTiers[0];
+  return fluencyTiers.find((tier) => charsPerMin < tier.max) ?? fluencyTiers.at(-1);
+}
+
+// A horizontal spectrum strip: all 15 real tiers as small neutral blocks in
+// a row, with only the current one filled in its actual color. Third distinct
+// shape after the dial and the vertical ladder — a level-meter instead of
+// either.
+function svgFluencyGauge(value, opts = {}) {
+  const { width = 320, height = 60 } = opts;
+  const padX = 6;
+  const barGap = 3;
+  const barY = 12;
+  const barH = 16;
+
+  const realTiers = fluencyTiers.slice(1); // drop the "no data" placeholder
+  const n = realTiers.length;
+  const barW = (width - padX * 2 - barGap * (n - 1)) / n;
+
+  const tier = fluencyTier(value);
+  const tierIndex = realTiers.indexOf(tier); // -1 when there's no reading data yet
+
+  const bars = realTiers
+    .map((t, i) => {
+      const bx = padX + i * (barW + barGap);
+      const fill = i === tierIndex ? t.color : '#d6d9d2';
+      return `<rect x="${bx.toFixed(1)}" y="${barY}" width="${barW.toFixed(1)}" height="${barH}" fill="${fill}" />`;
+    })
+    .join('');
+
+  const label = `<text x="${(width / 2).toFixed(1)}" y="${barY + barH + 18}" text-anchor="middle" font-family="${MONO}" font-size="11" fill="${tier.color}">${tier.label}</text>`;
+
+  return `<svg viewBox="0 0 ${width} ${height}" class="gauge-svg" role="img" aria-label="reading fluency spectrum">
+  ${bars}
+  ${label}
+</svg>`;
+}
+
+const fluencyGaugeSvg = svgFluencyGauge(readingFluency7);
+
+function contactLevel(day) {
+  if (day.frictionless_minimum) return 'level-2';
+  if (day.contact_day) return 'level-1';
+  return 'level-0';
+}
+
+// Calendar-grid layout (weeks as columns, Sun-Sat rows) instead of a flat strip.
+const calendarStart = weekdayIndexOf(last30[0].date);
+const paddedCalendar = [...Array.from({ length: calendarStart }, () => null), ...last30];
+const calendarWeeks = Math.ceil(paddedCalendar.length / 7);
+
+function weekdayIndexOf(dateString) {
+  return new Date(`${dateString}T00:00:00Z`).getUTCDay();
 }
 
 ---
@@ -333,6 +387,7 @@ function fluencyTitle(charsPerMin) {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
+    <meta name="color-scheme" content="light" />
     <title>storm-steel</title>
   </head>
 
@@ -340,31 +395,56 @@ function fluencyTitle(charsPerMin) {
     <main>
 <section class="instruments">
   <h1>storm-steel</h1>
+  <p class="eyebrow">reading &amp; listening instrument log · {firstDate} – {latestDate}</p>
 
   <p class="plain-label">overview</p>
   <div class="summary">
     <p><span>7d input</span><strong>{formatNumber(rolling7)}m</strong></p>
-    <p><span>consistency</span><strong>{activeDays7}/7</strong></p>
+    <p><span>streak</span><strong>{contactStreak}d</strong></p>
     <p><span>contact</span><strong>{contactDays30}/30</strong></p>
-    <p><span>balance</span><strong>{Math.round(weeklyListeningPct)}L / {Math.round(weeklyReadingPct)}R</strong></p>
     <p>
-  <span>reading fluency</span>
-  <strong>{fluencyTitle(readingFluency7)}</strong>
-</p>
-<p>
-  <span>fluency momentum</span>
-  <strong>{formatNumber(fluencyMomentum, 2)} {momentumLabel(fluencyMomentum)}</strong>
-</p>
+      <span>balance</span>
+      <strong>{Math.round(weeklyListeningPct)}L / {Math.round(weeklyReadingPct)}R</strong>
+    </p>
+    <p>
+      <span>reading fluency</span>
+      <strong
+        class="fluency-badge"
+        style={`--fc:${fluencyTier(readingFluency7).color}`}
+      >{fluencyTier(readingFluency7).label}</strong>
+    </p>
+    <p>
+      <span>fluency momentum</span>
+      <strong>{formatNumber(fluencyMomentum, 2)} {momentumLabel(fluencyMomentum)}</strong>
+    </p>
   </div>
 
+  <p class="plain-label">reading fluency</p>
+  <div class="gauge-wrap" set:html={fluencyGaugeSvg} />
+
   <p class="plain-label">input minutes</p>
-  <pre>{inputPointGraph}</pre>
+  <div class="chart-wrap" set:html={inputChartSvg} />
 
   <p class="plain-label">7d rolling average</p>
-  <pre>{rollingPointGraph}</pre>
+  <div class="chart-wrap" set:html={rollingChartSvg} />
 
   <p class="plain-label">contact</p>
-  <pre class="strip">{contactStrip}</pre>
+  <div
+    class="heatmap"
+    style={`grid-template-columns: repeat(${calendarWeeks}, 15px)`}
+    aria-label="last 30 days contact"
+  >
+    {paddedCalendar.map((day) =>
+      day ? (
+        <span
+          class:list={['heatmap-cell', contactLevel(day)]}
+          title={`${day.date} · ${Math.round(day.input)}m`}
+        />
+      ) : (
+        <span class="heatmap-cell empty" />
+      )
+    )}
+  </div>
   <p class="muted">
     {contactDays30}/30 contact · {frictionlessDays30}/30 frictionless minimum
   </p>
@@ -383,27 +463,25 @@ function fluencyTitle(charsPerMin) {
   <p class="muted">
     {Math.round(weeklyListeningPct)}% listen ·
     {Math.round(weeklyReadingPct)}% read ·
-    error {formatNumber(balanceError)}
+    target 70/30 · error {formatNumber(balanceError)}
   </p>
 
   <details class="more-metrics">
     <summary>more</summary>
-    <pre>{`input today           ${Math.round(inputToday)}m
-input 14d avg         ${formatNumber(rolling14)}m
+    <pre>{`input today            ${Math.round(inputToday)}m
+input 14d avg          ${formatNumber(rolling14)}m
 
-momentum              ${formatNumber(momentum, 2)} ${momentumLabel(momentum)}
-volatility            ${formatNumber(volatility)} ${volatilityLabel(volatility)}
-instability           ${formatNumber(instability, 2)} ${instabilityLabel(instability)}
-effective consistency ${formatNumber(effectiveConsistency)}
+momentum               ${formatNumber(momentum, 2)} ${momentumLabel(momentum)}   (last 3d vs prior 7d)
+volatility             ${formatNumber(volatility)} ${volatilityLabel(volatility)}   (stdev, last 14d)
+instability            ${formatNumber(instability, 2)} ${instabilityLabel(instability)}   (volatility / 14d avg)
 
-reading density       ${formatNumber(latestReadingDensity)} chars/min
-reading trend         ${readingFluencyTrend >= 0 ? '+' : ''}${formatNumber(readingFluencyTrend)} chars/min
-fluency last 3        ${formatNumber(fluencyLast3)} chars/min
-fluency previous 7    ${formatNumber(fluencyPrevious7)} chars/min
-fluency momentum      ${formatNumber(fluencyMomentum, 2)} ${momentumLabel(fluencyMomentum)}
+reading density        ${formatNumber(latestReadingDensity)} chars/min
+reading trend          ${readingFluencyTrend >= 0 ? '+' : ''}${formatNumber(readingFluencyTrend)} chars/min
+fluency last 3         ${formatNumber(fluencyLast3)} chars/min
+fluency previous 7     ${formatNumber(fluencyPrevious7)} chars/min
 
-last listen           ${formatDays(daysSinceListen)}
-last read             ${formatDays(daysSinceRead)}
+last listen            ${formatDays(daysSinceListen)}
+last read              ${formatDays(daysSinceRead)}
 `}</pre>
   </details>
 </section>
