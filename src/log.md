@@ -43,3 +43,10 @@ listen_min: 0
 read_min: 100
 read_chars: 4211
 ```
+
+## 2026-08-17
+```log
+listen_min: 0
+read_min: 64
+read_chars: 3049
+```
