@@ -91,6 +91,17 @@ blockquote {
   display: block;
 }
 
+.health-wrap {
+  width: 100%;
+  max-width: 500px;
+}
+
+.health-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
 .gauge-wrap {
   width: 100%;
   max-width: 320px;
