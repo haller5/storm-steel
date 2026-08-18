@@ -125,6 +125,31 @@ const momentum = safeRatio(avgLast3, avgPrevious7BeforeLast3);
 const volatility = stddev(last14.map((day) => day.input));
 const instability = safeRatio(volatility, rolling14);
 
+// Health blends three existing signals into one composite reading: are you
+// showing up (consistency, last14), is the trend improving or fading
+// (momentum), and is the pace steady or erratic (stability = inverse of
+// instability). Divides by last14.length rather than a hardcoded 14 so early
+// days — before 14 days of history even exist — aren't unfairly penalized.
+const contactDays14 = last14.filter((day) => day.contact_day).length;
+const consistencyScore = last14.length > 0 ? (contactDays14 / last14.length) * 100 : 0;
+const momentumScore = Math.min(100, Math.max(0, 50 + (momentum - 1) * 100));
+const stabilityScore = Math.min(100, Math.max(0, 100 - instability * 100));
+const healthScore = Math.round((consistencyScore + momentumScore + stabilityScore) / 3);
+
+const healthTiers = [
+  { max: 0, label: 'unforged', color: '#8b9498' },
+  { max: 25, label: 'corroding', color: '#8b4a3d' },
+  { max: 45, label: 'fatigued', color: '#a67a3d' },
+  { max: 65, label: 'strained', color: '#9a9143' },
+  { max: 85, label: 'forged', color: '#4f6b78' },
+  { max: 101, label: 'tempered', color: '#2f4a56' },
+];
+
+function healthTier(score) {
+  if (score <= 0) return healthTiers[0];
+  return healthTiers.find((tier) => score < tier.max) ?? healthTiers.at(-1);
+}
+
 const weeklyListen = sum(last7, 'listen_min');
 const weeklyRead = sum(last7, 'read_min');
 const weeklyInput = weeklyListen + weeklyRead;
@@ -234,6 +259,42 @@ const rollingSeries14 = chartDays.map((_, index) => {
 
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
+// A single graded bar for the composite health score — filled proportionally,
+// colored by whichever tier it's currently in, with thin dividers at each
+// tier boundary. Distinct shape from the fluency spectrum strip below it.
+function svgHealthBar(score, opts = {}) {
+  const { width = 500, height = 60 } = opts;
+  const barX = 8;
+  const barY = 16;
+  const barW = width - barX * 2;
+  const barH = 20;
+
+  const clamped = Math.min(Math.max(score, 0), 100);
+  const tier = healthTier(score);
+
+  const track = `<rect x="${barX}" y="${barY}" width="${barW}" height="${barH}" fill="#edede6" stroke="#d6d9d2" stroke-width="1.2" />`;
+  const fill = `<rect x="${barX}" y="${barY}" width="${(barW * (clamped / 100)).toFixed(1)}" height="${barH}" fill="${tier.color}" />`;
+
+  const boundaries = healthTiers.slice(1, -1).map((t) => t.max); // 25, 45, 65, 85
+  const dividers = boundaries
+    .map((b) => {
+      const bx = barX + barW * (b / 100);
+      return `<line x1="${bx.toFixed(1)}" y1="${barY}" x2="${bx.toFixed(1)}" y2="${barY + barH}" stroke="#edede6" stroke-width="1.4" />`;
+    })
+    .join('');
+
+  const label = `<text x="${barX}" y="${barY + barH + 18}" font-family="${MONO}" font-size="11" fill="${tier.color}">${Math.round(clamped)} · ${tier.label}</text>`;
+
+  return `<svg viewBox="0 0 ${width} ${height}" class="health-svg" role="img" aria-label="immersion health">
+  ${track}
+  ${fill}
+  ${dividers}
+  ${label}
+</svg>`;
+}
+
+const healthBarSvg = svgHealthBar(healthScore);
+
 function svgLineChart(values, labels, opts = {}) {
   const {
     width = 640,
@@ -308,19 +369,20 @@ const rollingChartSvg = svgLineChart(
 const fluencyTiers = [
   { max: 0, label: '—', color: '#8b9498' },
   { max: 15, label: '(•‿•) flutter I', color: '#6f93a3' },
-  { max: 30, label: '( •_•) flutter II', color: '#5f8697' },
-  { max: 50, label: '( •̀_•́ ) wind I', color: '#4f7a8c' },
-  { max: 75, label: '(ง •̀_•́)ง wind II', color: '#3f6b7c' },
-  { max: 100, label: '(｀_´) hail I', color: '#6f7a5f' },
-  { max: 140, label: '(¬_¬) hail II', color: '#7c8a4f' },
-  { max: 190, label: '(ಠ_ಠ) gale I', color: '#8f8a3f' },
-  { max: 250, label: "(ง'̀-'́)ง gale II", color: '#a3853f' },
-  { max: 325, label: '(◉_◉) torrent I', color: '#b5751b' },
-  { max: 425, label: '(ง •̀_•́) torrent II', color: '#b06229' },
-  { max: 550, label: '( •̀_•́) tempest I', color: '#a94f2f' },
-  { max: 700, label: '(╯°□°）╯ tempest II', color: '#a13f3a' },
-  { max: 900, label: '(￣^￣)ゞ storm I', color: '#93384a' },
-  { max: 1200, label: '(✧_✧) storm II', color: '#7d3560' },
+  { max: 25, label: '( •_•) flutter II', color: '#5f8697' },
+  { max: 40, label: '( •̀_•́ ) wind I', color: '#4f7a8c' },
+  { max: 60, label: '(ง •̀_•́)ง wind II', color: '#3f6b7c' },
+  { max: 85, label: '(｀_´) hail I', color: '#6f7a5f' },
+  { max: 115, label: '(¬_¬) hail II', color: '#7c8a4f' },
+  { max: 150, label: '(ಠ_ಠ) gale I', color: '#8f8a3f' },
+  { max: 190, label: "(ง'̀-'́)ง gale II", color: '#a3853f' },
+  { max: 230, label: '(◉_◉) torrent I', color: '#b5751b' },
+  { max: 270, label: '(ง •̀_•́) torrent II', color: '#b06229' },
+  { max: 305, label: '( •̀_•́) tempest I', color: '#a94f2f' },
+  { max: 335, label: '(╯°□°）╯ tempest II', color: '#a13f3a' },
+  // 357 = native adult mean (SD 56); 413 = mean + 1 SD.
+  { max: 357, label: '(￣^￣)ゞ storm I', color: '#93384a' },
+  { max: 413, label: '(✧_✧) storm II', color: '#7d3560' },
   { max: Infinity, label: 'ฅ(=✧ω✧=)ฅ STURM UND DRANG', color: '#5c2e73' },
 ];
 
@@ -418,6 +480,9 @@ function weekdayIndexOf(dateString) {
       <strong>{formatNumber(fluencyMomentum, 2)} {momentumLabel(fluencyMomentum)}</strong>
     </p>
   </div>
+
+  <p class="plain-label">immersion health</p>
+  <div class="health-wrap" set:html={healthBarSvg} />
 
   <p class="plain-label">reading fluency</p>
   <div class="gauge-wrap" set:html={fluencyGaugeSvg} />
