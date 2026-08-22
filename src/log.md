@@ -64,3 +64,17 @@ listen_min: 0
 read_min: 75
 read_chars: 3809
 ```
+
+## 2026-08-20
+```log
+listen_min: 18
+read_min: 0
+read_chars: 0
+```
+## 2026-08-21
+```log
+listen_min: 0
+read_min: 0
+read_chars: 0
+```
+
