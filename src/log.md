@@ -85,3 +85,24 @@ read_min: 34
 read_chars: 1577
 ```
 
+## 2026-08-23
+```log
+listen_min: 0
+read_min: 0
+read_chars: 0
+```
+
+## 2026-08-24
+```log
+listen_min: 0
+read_min: 0
+read_chars: 0
+```
+
+## 2026-08-25
+```log
+listen_min: 0
+read_min: 29
+read_chars: 1429
+```
+
