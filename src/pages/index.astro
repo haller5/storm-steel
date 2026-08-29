@@ -307,6 +307,7 @@ function svgLineChart(values, labels, opts = {}) {
     showDots = true,
     showAxis = true,
     yTicks = 5,
+    yMin = 0,
     yMax = null,
     maxMarker = null,
   } = opts;
@@ -315,9 +316,10 @@ function svgLineChart(values, labels, opts = {}) {
   const innerH = height - padTop - padBottom;
   const numericValues = values.filter((v) => typeof v === 'number' && Number.isFinite(v));
   const max = yMax ?? Math.max(...numericValues, 1);
+  const span = max - yMin || 1;
 
   const x = (i) => padLeft + (values.length <= 1 ? 0 : (i / (values.length - 1)) * innerW);
-  const y = (v) => padTop + innerH - (v / max) * innerH;
+  const y = (v) => padTop + innerH - ((v - yMin) / span) * innerH;
 
   // Build the line as separate subpaths, breaking wherever a day has no
   // value at all (e.g. no reading that day) rather than interpolating
@@ -335,16 +337,21 @@ function svgLineChart(values, labels, opts = {}) {
     broken = false;
   });
 
-  // Baseline (0) is always drawn bolder, like the old ascii chart's
-  // "+----" rule — with no number attached to it either.
-  const baselineY = y(0);
-  const baseline = `<line x1="${padLeft}" y1="${baselineY.toFixed(1)}" x2="${width - padRight}" y2="${baselineY.toFixed(1)}" stroke="#48545e" stroke-width="1.4" />`;
+  // Baseline is the bottom of the visible range (yMin, not necessarily 0).
+  // It only gets a numeric label when the floor has actually been raised —
+  // charts still anchored at 0 stay exactly as before, unlabeled.
+  const baselineY = y(yMin);
+  const baselineLabel =
+    yMin !== 0
+      ? `<text x="${padLeft - 6}" y="${(baselineY + 3).toFixed(1)}" text-anchor="end" font-size="10" font-family="${MONO}" fill="#48545e">${Math.round(yMin)}</text>`
+      : '';
+  const baseline = `<line x1="${padLeft}" y1="${baselineY.toFixed(1)}" x2="${width - padRight}" y2="${baselineY.toFixed(1)}" stroke="#48545e" stroke-width="1.4" />${baselineLabel}`;
 
   // The rest of the tick lines (with numeric labels) are optional — a chart
   // can turn them off and rely on the baseline plus a maxMarker instead.
   const tickLines = showAxis
     ? Array.from({ length: yTicks }, (_, i) => {
-        const value = (max / yTicks) * (i + 1);
+        const value = yMin + (span / yTicks) * (i + 1);
         const gy = y(value);
         return `<line x1="${padLeft}" y1="${gy.toFixed(1)}" x2="${width - padRight}" y2="${gy.toFixed(1)}" stroke="#d6d9d2" stroke-width="1" />
 <text x="${padLeft - 6}" y="${(gy + 3).toFixed(1)}" text-anchor="end" font-size="10" font-family="${MONO}" fill="#48545e">${Math.round(value)}</text>`;
@@ -415,6 +422,18 @@ const fluencyAxisMax = allTimeMaxFluencyDay
   ? Math.ceil(allTimeMaxFluencyDay.reading_density * 1.1)
   : null;
 
+// The floor sits between 0 and this window's slowest reading day — close to
+// the minimum (small gap), not close to zero (which would waste most of the
+// chart on empty space below every point). Rounded down to a clean multiple
+// of 5 so the one axis label reads as a normal number.
+const windowFluencyValues = chartDays
+  .map((day) => day.reading_density)
+  .filter((v) => typeof v === 'number' && Number.isFinite(v));
+
+const fluencyAxisMin = windowFluencyValues.length
+  ? Math.max(0, Math.floor((Math.min(...windowFluencyValues) * 0.85) / 5) * 5)
+  : 0;
+
 function formatShortDate(dateString) {
   const [year, month, day] = dateString.split('-').map(Number);
   return `${month}.${day}.${String(year).slice(-2)}`;
@@ -424,6 +443,8 @@ const dailyFluencySvg = svgLineChart(
   chartDays.map((day) => day.reading_density),
   chartDays.map((day) => day.date.slice(5)),
   {
+    padLeft: 58,
+    yMin: fluencyAxisMin,
     yMax: fluencyAxisMax,
     showAxis: false,
     maxMarker: allTimeMaxFluencyDay
