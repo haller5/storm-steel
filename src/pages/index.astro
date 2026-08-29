@@ -305,37 +305,71 @@ function svgLineChart(values, labels, opts = {}) {
     padBottom = 24,
     color = '#48545e',
     showDots = true,
+    showAxis = true,
     yTicks = 5,
+    yMax = null,
+    maxMarker = null,
   } = opts;
 
   const innerW = width - padLeft - padRight;
   const innerH = height - padTop - padBottom;
-  const max = Math.max(...values, 1);
+  const numericValues = values.filter((v) => typeof v === 'number' && Number.isFinite(v));
+  const max = yMax ?? Math.max(...numericValues, 1);
 
   const x = (i) => padLeft + (values.length <= 1 ? 0 : (i / (values.length - 1)) * innerW);
   const y = (v) => padTop + innerH - (v / max) * innerH;
 
-  const points = values.map((v, i) => [x(i), y(v)]);
-  const linePath = points
-    .map(([px, py], i) => `${i === 0 ? 'M' : 'L'}${px.toFixed(1)},${py.toFixed(1)}`)
-    .join(' ');
+  // Build the line as separate subpaths, breaking wherever a day has no
+  // value at all (e.g. no reading that day) rather than interpolating
+  // straight through the gap as if it were a real reading.
+  let linePath = '';
+  let broken = true;
+  values.forEach((v, i) => {
+    if (typeof v !== 'number' || !Number.isFinite(v)) {
+      broken = true;
+      return;
+    }
+    const px = x(i).toFixed(1);
+    const py = y(v).toFixed(1);
+    linePath += `${broken ? 'M' : 'L'}${px},${py} `;
+    broken = false;
+  });
 
-  // Baseline (0) drawn bolder, like the old ascii chart's "+----" rule; the rest stay light.
-  const gridLines = Array.from({ length: yTicks + 1 }, (_, i) => {
-    const value = (max / yTicks) * i;
-    const gy = y(value);
-    const isBaseline = i === 0;
-    return `<line x1="${padLeft}" y1="${gy.toFixed(1)}" x2="${width - padRight}" y2="${gy.toFixed(1)}" stroke="${isBaseline ? '#48545e' : '#d6d9d2'}" stroke-width="${isBaseline ? 1.4 : 1}" />
+  // Baseline (0) is always drawn bolder, like the old ascii chart's
+  // "+----" rule — with no number attached to it either.
+  const baselineY = y(0);
+  const baseline = `<line x1="${padLeft}" y1="${baselineY.toFixed(1)}" x2="${width - padRight}" y2="${baselineY.toFixed(1)}" stroke="#48545e" stroke-width="1.4" />`;
+
+  // The rest of the tick lines (with numeric labels) are optional — a chart
+  // can turn them off and rely on the baseline plus a maxMarker instead.
+  const tickLines = showAxis
+    ? Array.from({ length: yTicks }, (_, i) => {
+        const value = (max / yTicks) * (i + 1);
+        const gy = y(value);
+        return `<line x1="${padLeft}" y1="${gy.toFixed(1)}" x2="${width - padRight}" y2="${gy.toFixed(1)}" stroke="#d6d9d2" stroke-width="1" />
 <text x="${padLeft - 6}" y="${(gy + 3).toFixed(1)}" text-anchor="end" font-size="10" font-family="${MONO}" fill="#48545e">${Math.round(value)}</text>`;
-  }).join('');
+      }).join('')
+    : '';
+
+  // A single reference line at a specific value, labeled with text instead
+  // of a number — used for marking a personal best against a date rather
+  // than a generic axis tick.
+  const markerLine = maxMarker
+    ? (() => {
+        const my = y(maxMarker.value);
+        return `<line x1="${padLeft}" y1="${my.toFixed(1)}" x2="${width - padRight}" y2="${my.toFixed(1)}" stroke="#8b9498" stroke-width="1.2" stroke-dasharray="0.1 6" stroke-linecap="round" />
+<text x="${padLeft - 6}" y="${(my + 3).toFixed(1)}" text-anchor="end" font-size="10" font-family="${MONO}" fill="#48545e">${maxMarker.label}</text>`;
+      })()
+    : '';
 
   // Points are literal asterisks (text glyphs), not circles — a callback to
   // the original hand-plotted "*" chart, just no longer locked to a fixed
-  // monospace grid.
+  // monospace grid. No asterisk (and no line) on days with no value.
   const dots = showDots
-    ? points
-        .map(([px, py]) => {
-          return `<text x="${px.toFixed(1)}" y="${py.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-family="${MONO}" font-size="17" font-weight="700" fill="${color}">*</text>`;
+    ? values
+        .map((v, i) => {
+          if (typeof v !== 'number' || !Number.isFinite(v)) return '';
+          return `<text x="${x(i).toFixed(1)}" y="${y(v).toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-family="${MONO}" font-size="17" font-weight="700" fill="${color}">*</text>`;
         })
         .join('')
     : '';
@@ -348,7 +382,9 @@ function svgLineChart(values, labels, opts = {}) {
     .join('');
 
   return `<svg viewBox="0 0 ${width} ${height}" class="chart-svg" role="img" aria-label="chart" preserveAspectRatio="xMidYMid meet">
-  ${gridLines}
+  ${tickLines}
+  ${baseline}
+  ${markerLine}
   <path d="${linePath}" fill="none" stroke="${color}" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" />
   ${dots}
   ${xLabels}
@@ -364,6 +400,36 @@ const rollingChartSvg = svgLineChart(
   rollingSeries14,
   chartDays.map((day) => day.date.slice(5)),
   { showDots: false }
+);
+
+// All-time max reading speed (across full history, not just this window) and
+// the date it happened, so the chart's y-axis is anchored to a personal best
+// instead of autoscaling to whatever this window's peak happens to be.
+const allTimeMaxFluencyDay = days.reduce((best, day) => {
+  if (day.reading_density === null) return best;
+  if (!best || day.reading_density > best.reading_density) return day;
+  return best;
+}, null);
+
+const fluencyAxisMax = allTimeMaxFluencyDay
+  ? Math.ceil(allTimeMaxFluencyDay.reading_density * 1.1)
+  : null;
+
+function formatShortDate(dateString) {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return `${month}.${day}.${String(year).slice(-2)}`;
+}
+
+const dailyFluencySvg = svgLineChart(
+  chartDays.map((day) => day.reading_density),
+  chartDays.map((day) => day.date.slice(5)),
+  {
+    yMax: fluencyAxisMax,
+    showAxis: false,
+    maxMarker: allTimeMaxFluencyDay
+      ? { value: allTimeMaxFluencyDay.reading_density, label: formatShortDate(allTimeMaxFluencyDay.date) }
+      : null,
+  }
 );
 
 const fluencyTiers = [
@@ -486,6 +552,10 @@ function weekdayIndexOf(dateString) {
 
   <p class="plain-label">reading fluency</p>
   <div class="gauge-wrap" set:html={fluencyGaugeSvg} />
+
+  <p class="plain-label">reading speed</p>
+  <div class="chart-wrap" set:html={dailyFluencySvg} />
+  <p class="muted">chars/min · gaps mark days with no reading</p>
 
   <p class="plain-label">input minutes</p>
   <div class="chart-wrap" set:html={inputChartSvg} />
