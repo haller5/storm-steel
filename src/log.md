@@ -126,3 +126,17 @@ listen_min: 0
 read_min: 28
 read_chars: 1163
 ```
+
+## 2026-08-30
+```log
+listen_min: 0
+read_min: 0
+read_chars: 0
+```
+
+## 2026-08-31
+```log
+listen_min: 0
+read_min: 20
+read_chars: 1075
+```
