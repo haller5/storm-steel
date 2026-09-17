@@ -111,7 +111,6 @@ const rolling7 = average(last7, 'input');
 const rolling14 = average(last14, 'input');
 
 const contactDays30 = last30.filter((day) => day.contact_day).length;
-const frictionlessDays30 = last30.filter((day) => day.frictionless_minimum).length;
 
 const avgLast3 = average(last3, 'input');
 const avgPrevious7BeforeLast3 = average(previous7BeforeLast3, 'input');
@@ -178,17 +177,10 @@ const daysSinceListen = daysSince('listen_min');
 const daysSinceRead = daysSince('read_min');
 
 const readingDaysLast7 = last7.filter((day) => day.read_min >= 10 && day.reading_density !== null);
-const readingDaysPrevious7 = previous7.filter((day) => day.read_min >= 10 && day.reading_density !== null);
 
 const readingFluency7 = readingDaysLast7.length
   ? readingDaysLast7.reduce((total, day) => total + day.reading_density, 0) / readingDaysLast7.length
   : 0;
-
-const readingFluencyPrevious7 = readingDaysPrevious7.length
-  ? readingDaysPrevious7.reduce((total, day) => total + day.reading_density, 0) / readingDaysPrevious7.length
-  : 0;
-
-const readingFluencyTrend = readingFluency7 - readingFluencyPrevious7;
 
 const readingSessions = days.filter(
   (day) => day.read_min >= 10 && day.reading_density !== null
@@ -210,10 +202,6 @@ const fluencyLast3 = averageReadingDensity(last3ReadingSessions);
 const fluencyPrevious7 = averageReadingDensity(previous7ReadingSessions);
 const fluencyMomentum = safeRatio(fluencyLast3, fluencyPrevious7);
 
-const latestReadingDensity = [...days]
-  .reverse()
-  .find((day) => day.reading_density !== null)?.reading_density ?? 0;
-
 function formatNumber(value, digits = 1) {
   if (!Number.isFinite(value)) return '0';
   return value.toFixed(digits);
@@ -230,6 +218,13 @@ function momentumLabel(value) {
   if (value >= 1.1) return 'rising';
   if (value <= 0.9) return 'fading';
   return 'stable';
+}
+
+// Small glanceable trend glyph to pair with momentum labels instead of text alone.
+function momentumArrow(value) {
+  if (value >= 1.1) return '▲';
+  if (value <= 0.9) return '▼';
+  return '▪';
 }
 
 function volatilityLabel(value) {
@@ -256,7 +251,7 @@ const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
 // A single graded bar for the composite health score — filled proportionally,
 // colored by whichever tier it's currently in, with thin dividers at each
-// tier boundary. Distinct shape from the fluency spectrum strip below it.
+// tier boundary.
 function svgHealthBar(score, opts = {}) {
   const { width = 500, height = 60 } = opts;
   const barX = 8;
@@ -270,7 +265,7 @@ function svgHealthBar(score, opts = {}) {
   const track = `<rect x="${barX}" y="${barY}" width="${barW}" height="${barH}" fill="#edede6" stroke="#d6d9d2" stroke-width="1.2" />`;
   const fill = `<rect x="${barX}" y="${barY}" width="${(barW * (clamped / 100)).toFixed(1)}" height="${barH}" fill="${tier.color}" />`;
 
-  const boundaries = healthTiers.slice(1, -1).map((t) => t.max); // 25, 45, 65, 85
+  const boundaries = healthTiers.slice(1, -1).map((t) => t.max);
   const dividers = boundaries
     .map((b) => {
       const bx = barX + barW * (b / 100);
@@ -290,6 +285,21 @@ function svgHealthBar(score, opts = {}) {
 
 const healthBarSvg = svgHealthBar(healthScore);
 
+// Small inline bar for the overview "balance" stat — replaces the old
+// full-width balance section + duplicate caption text below it.
+function svgMiniBalanceBar(listenPct, readPct, opts = {}) {
+  const { width = 72, height = 10 } = opts;
+  const listenW = (width * listenPct) / 100;
+  const readW = width - listenW;
+
+  return `<svg viewBox="0 0 ${width} ${height}" class="mini-balance-svg" role="img" aria-label="listen vs read balance">
+  <rect x="0" y="0" width="${listenW.toFixed(1)}" height="${height}" fill="#4f7a8c" />
+  <rect x="${listenW.toFixed(1)}" y="0" width="${readW.toFixed(1)}" height="${height}" fill="#9a9143" />
+</svg>`;
+}
+
+const miniBalanceSvg = svgMiniBalanceBar(weeklyListeningPct, weeklyReadingPct);
+
 function svgLineChart(values, labels, opts = {}) {
   const {
     width = 640,
@@ -305,20 +315,24 @@ function svgLineChart(values, labels, opts = {}) {
     yMin = 0,
     yMax = null,
     maxMarker = null,
+    overlay = null,
+    overlayColor = '#8b9498',
   } = opts;
 
   const innerW = width - padLeft - padRight;
   const innerH = height - padTop - padBottom;
   const numericValues = values.filter((v) => typeof v === 'number' && Number.isFinite(v));
-  const max = yMax ?? Math.max(...numericValues, 1);
+  const overlayNumeric = overlay
+    ? overlay.filter((v) => typeof v === 'number' && Number.isFinite(v))
+    : [];
+  const max = yMax ?? Math.max(...numericValues, ...overlayNumeric, 1);
   const span = max - yMin || 1;
 
   const x = (i) => padLeft + (values.length <= 1 ? 0 : (i / (values.length - 1)) * innerW);
   const y = (v) => padTop + innerH - ((v - yMin) / span) * innerH;
 
   // Build the line as separate subpaths, breaking wherever a day has no
-  // value at all (e.g. no reading that day) rather than interpolating
-  // straight through the gap as if it were a real reading.
+  // value at all rather than interpolating straight through the gap.
   let linePath = '';
   let broken = true;
   values.forEach((v, i) => {
@@ -332,9 +346,26 @@ function svgLineChart(values, labels, opts = {}) {
     broken = false;
   });
 
-  // Baseline is the bottom of the visible range (yMin, not necessarily 0).
-  // It only gets a numeric label when the floor has actually been raised —
-  // charts still anchored at 0 stay exactly as before, unlabeled.
+  // Optional second series overlaid on the same axes (e.g. a rolling
+  // average alongside the raw daily line) — dashed, no dots, own color.
+  let overlayPath = '';
+  if (overlay) {
+    let brokenOverlay = true;
+    overlay.forEach((v, i) => {
+      if (typeof v !== 'number' || !Number.isFinite(v)) {
+        brokenOverlay = true;
+        return;
+      }
+      const px = x(i).toFixed(1);
+      const py = y(v).toFixed(1);
+      overlayPath += `${brokenOverlay ? 'M' : 'L'}${px},${py} `;
+      brokenOverlay = false;
+    });
+  }
+  const overlayEl = overlay
+    ? `<path d="${overlayPath}" fill="none" stroke="${overlayColor}" stroke-width="1.6" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round" />`
+    : '';
+
   const baselineY = y(yMin);
   const baselineLabel =
     yMin !== 0
@@ -342,8 +373,6 @@ function svgLineChart(values, labels, opts = {}) {
       : '';
   const baseline = `<line x1="${padLeft}" y1="${baselineY.toFixed(1)}" x2="${width - padRight}" y2="${baselineY.toFixed(1)}" stroke="#48545e" stroke-width="1.4" />${baselineLabel}`;
 
-  // The rest of the tick lines (with numeric labels) are optional — a chart
-  // can turn them off and rely on the baseline plus a maxMarker instead.
   const tickLines = showAxis
     ? Array.from({ length: yTicks }, (_, i) => {
         const value = yMin + (span / yTicks) * (i + 1);
@@ -353,9 +382,6 @@ function svgLineChart(values, labels, opts = {}) {
       }).join('')
     : '';
 
-  // A single reference line at a specific value, labeled with text instead
-  // of a number — used for marking a personal best against a date rather
-  // than a generic axis tick.
   const markerLine = maxMarker
     ? (() => {
         const my = y(maxMarker.value);
@@ -364,9 +390,6 @@ function svgLineChart(values, labels, opts = {}) {
       })()
     : '';
 
-  // Points are literal asterisks (text glyphs), not circles — a callback to
-  // the original hand-plotted "*" chart, just no longer locked to a fixed
-  // monospace grid. No asterisk (and no line) on days with no value.
   const dots = showDots
     ? values
         .map((v, i) => {
@@ -388,25 +411,20 @@ function svgLineChart(values, labels, opts = {}) {
   ${baseline}
   ${markerLine}
   <path d="${linePath}" fill="none" stroke="${color}" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" />
+  ${overlayEl}
   ${dots}
   ${xLabels}
 </svg>`;
 }
 
+// Combined input chart: solid = daily input, dashed = 7-day rolling average.
+// Replaces what used to be two separate, largely overlapping charts.
 const inputChartSvg = svgLineChart(
   chartDays.map((day) => day.input),
-  chartDays.map((day) => day.date.slice(5))
-);
-
-const rollingChartSvg = svgLineChart(
-  rollingSeries14,
   chartDays.map((day) => day.date.slice(5)),
-  { showDots: false }
+  { overlay: rollingSeries14, overlayColor: '#8b9498' }
 );
 
-// All-time max reading speed (across full history, not just this window) and
-// the date it happened, so the chart's y-axis is anchored to a personal best
-// instead of autoscaling to whatever this window's peak happens to be.
 const allTimeMaxFluencyDay = days.reduce((best, day) => {
   if (day.reading_density === null) return best;
   if (!best || day.reading_density > best.reading_density) return day;
@@ -417,10 +435,6 @@ const fluencyAxisMax = allTimeMaxFluencyDay
   ? Math.ceil(allTimeMaxFluencyDay.reading_density * 1.1)
   : null;
 
-// The floor sits between 0 and this window's slowest reading day — close to
-// the minimum (small gap), not close to zero (which would waste most of the
-// chart on empty space below every point). Rounded down to a clean multiple
-// of 5 so the one axis label reads as a normal number.
 const windowFluencyValues = chartDays
   .map((day) => day.reading_density)
   .filter((v) => typeof v === 'number' && Number.isFinite(v));
@@ -462,7 +476,6 @@ const fluencyTiers = [
   { max: 270, label: '(ง •̀_•́) torrent II', color: '#b06229' },
   { max: 305, label: '( •̀_•́) tempest I', color: '#a94f2f' },
   { max: 335, label: '(╯°□°）╯ tempest II', color: '#a13f3a' },
-  // 357 = native adult mean (SD 56); 413 = mean + 1 SD.
   { max: 357, label: '(￣^￣)ゞ storm I', color: '#93384a' },
   { max: 413, label: '(✧_✧) storm II', color: '#7d3560' },
   { max: Infinity, label: 'ฅ(=✧ω✧=)ฅ STURM UND DRANG', color: '#5c2e73' },
@@ -473,56 +486,40 @@ function fluencyTier(charsPerMin) {
   return fluencyTiers.find((tier) => charsPerMin < tier.max) ?? fluencyTiers.at(-1);
 }
 
-// A horizontal spectrum strip: all 15 real tiers as small neutral blocks in
-// a row, with only the current one filled in its actual color. Third distinct
-// shape after the dial and the vertical ladder — a level-meter instead of
-// either.
-function svgFluencyGauge(value, opts = {}) {
-  const { width = 320, height = 60 } = opts;
-  const padX = 6;
-  const barGap = 3;
-  const barY = 12;
-  const barH = 16;
-
-  const realTiers = fluencyTiers.slice(1); // drop the "no data" placeholder
-  const n = realTiers.length;
-  const barW = (width - padX * 2 - barGap * (n - 1)) / n;
-
-  const tier = fluencyTier(value);
-  const tierIndex = realTiers.indexOf(tier); // -1 when there's no reading data yet
-
-  const bars = realTiers
-    .map((t, i) => {
-      const bx = padX + i * (barW + barGap);
-      const fill = i === tierIndex ? t.color : '#d6d9d2';
-      return `<rect x="${bx.toFixed(1)}" y="${barY}" width="${barW.toFixed(1)}" height="${barH}" fill="${fill}" />`;
-    })
-    .join('');
-
-  const label = `<text x="${(width / 2).toFixed(1)}" y="${barY + barH + 18}" text-anchor="middle" font-family="${MONO}" font-size="11" fill="${tier.color}">${tier.label}</text>`;
-
-  return `<svg viewBox="0 0 ${width} ${height}" class="gauge-svg" role="img" aria-label="reading fluency spectrum">
-  ${bars}
-  ${label}
-</svg>`;
-}
-
-const fluencyGaugeSvg = svgFluencyGauge(readingFluency7);
-
-function contactLevel(day) {
-  if (day.frictionless_minimum) return 'level-2';
-  if (day.contact_day) return 'level-1';
-  return 'level-0';
-}
-
-// Calendar-grid layout (weeks as columns, Sun-Sat rows) instead of a flat strip.
 function weekdayIndexOf(dateString) {
   return new Date(`${dateString}T00:00:00Z`).getUTCDay();
 }
 
-const calendarStart = weekdayIndexOf(last30[0].date);
-const paddedCalendar = [...Array.from({ length: calendarStart }, () => null), ...last30];
-const calendarWeeks = Math.ceil(paddedCalendar.length / 7);
+// Anki/GitHub-style heatmap over the FULL logged history (not just 30 days),
+// colored by quartile of that day's input minutes rather than a fixed
+// on/off/threshold split — so it stays meaningful as more days accumulate.
+const nonZeroInputs = days.map((d) => d.input).filter((v) => v > 0).sort((a, b) => a - b);
+
+function quantile(arr, q) {
+  if (!arr.length) return 0;
+  const pos = (arr.length - 1) * q;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  return arr[base + 1] !== undefined ? arr[base] + rest * (arr[base + 1] - arr[base]) : arr[base];
+}
+
+const q25 = quantile(nonZeroInputs, 0.25);
+const q50 = quantile(nonZeroInputs, 0.5);
+const q75 = quantile(nonZeroInputs, 0.75);
+
+const heatColors = ['#edede6', '#cfe0e6', '#8fb8c9', '#4f7a8c', '#2f4a56'];
+
+function heatColor(mins) {
+  if (mins <= 0) return heatColors[0];
+  if (mins <= q25) return heatColors[1];
+  if (mins <= q50) return heatColors[2];
+  if (mins <= q75) return heatColors[3];
+  return heatColors[4];
+}
+
+const heatmapStart = weekdayIndexOf(days[0].date);
+const paddedHeatmap = [...Array.from({ length: heatmapStart }, () => null), ...days];
+const heatmapWeeks = Math.ceil(paddedHeatmap.length / 7);
 ---
 
 <!doctype html>
@@ -548,6 +545,7 @@ const calendarWeeks = Math.ceil(paddedCalendar.length / 7);
     <p>
       <span>balance</span>
       <strong>{Math.round(weeklyListeningPct)}L / {Math.round(weeklyReadingPct)}R</strong>
+      <span class="mini-balance-wrap" set:html={miniBalanceSvg} />
     </p>
     <p>
       <span>reading fluency</span>
@@ -558,15 +556,12 @@ const calendarWeeks = Math.ceil(paddedCalendar.length / 7);
     </p>
     <p>
       <span>fluency momentum</span>
-      <strong>{formatNumber(fluencyMomentum, 2)} {momentumLabel(fluencyMomentum)}</strong>
+      <strong>{momentumArrow(fluencyMomentum)} {formatNumber(fluencyMomentum, 2)} {momentumLabel(fluencyMomentum)}</strong>
     </p>
   </div>
 
   <p class="plain-label">immersion health</p>
   <div class="health-wrap" set:html={healthBarSvg} />
-
-  <p class="plain-label">reading fluency</p>
-  <div class="gauge-wrap" set:html={fluencyGaugeSvg} />
 
   <p class="plain-label">reading speed</p>
   <div class="chart-wrap" set:html={dailyFluencySvg} />
@@ -574,61 +569,33 @@ const calendarWeeks = Math.ceil(paddedCalendar.length / 7);
 
   <p class="plain-label">input minutes</p>
   <div class="chart-wrap" set:html={inputChartSvg} />
+  <p class="muted">solid = daily · dashed = 7d rolling average</p>
 
-  <p class="plain-label">7d rolling average</p>
-  <div class="chart-wrap" set:html={rollingChartSvg} />
-
-  <p class="plain-label">contact</p>
+  <p class="plain-label">immersion heatmap</p>
   <div
     class="heatmap"
-    style={`grid-template-columns: repeat(${calendarWeeks}, 15px)`}
-    aria-label="last 30 days contact"
+    style={`grid-template-columns: repeat(${heatmapWeeks}, 15px)`}
+    aria-label="full history contact heatmap"
   >
-    {paddedCalendar.map((day) =>
+    {paddedHeatmap.map((day) =>
       day ? (
         <span
-          class:list={['heatmap-cell', contactLevel(day)]}
-          title={`${day.date} · ${Math.round(day.input)}m`}
+          class="heatmap-cell"
+          style={`background-color:${heatColor(day.input)}`}
+          title={`${day.date} · ${Math.round(day.input)}m (${day.listen_min}L/${day.read_min}R)`}
         />
       ) : (
         <span class="heatmap-cell empty" />
       )
     )}
   </div>
-  <p class="muted">
-    {contactDays30}/30 contact · {frictionlessDays30}/30 frictionless minimum
-  </p>
-
-  <p class="plain-label">balance</p>
-  <div class="balance-bar" aria-label="listening and reading balance">
-    <div
-      class="balance-listen"
-      style={`width:${weeklyListeningPct}%`}
-    ></div>
-    <div
-      class="balance-read"
-      style={`width:${weeklyReadingPct}%`}
-    ></div>
-  </div>
-  <p class="muted">
-    {Math.round(weeklyListeningPct)}% listen ·
-    {Math.round(weeklyReadingPct)}% read ·
-    target 70/30 · error {formatNumber(balanceError)}
-  </p>
+  <p class="muted">darker = more input that day · {contactDays30}/30 contact this month</p>
 
   <details class="more-metrics">
     <summary>more</summary>
-    <pre>{`input today            ${Math.round(inputToday)}m
-input 14d avg          ${formatNumber(rolling14)}m
-
-momentum               ${formatNumber(momentum, 2)} ${momentumLabel(momentum)}   (last 3d vs prior 7d)
+    <pre>{`momentum               ${momentumArrow(momentum)} ${formatNumber(momentum, 2)} ${momentumLabel(momentum)}   (last 3d vs prior 7d)
 volatility             ${formatNumber(volatility)} ${volatilityLabel(volatility)}   (stdev, last 14d)
 instability            ${formatNumber(instability, 2)} ${instabilityLabel(instability)}   (volatility / 14d avg)
-
-reading density        ${formatNumber(latestReadingDensity)} chars/min
-reading trend          ${readingFluencyTrend >= 0 ? '+' : ''}${formatNumber(readingFluencyTrend)} chars/min
-fluency last 3         ${formatNumber(fluencyLast3)} chars/min
-fluency previous 7     ${formatNumber(fluencyPrevious7)} chars/min
 
 last listen            ${formatDays(daysSinceListen)}
 last read              ${formatDays(daysSinceRead)}
