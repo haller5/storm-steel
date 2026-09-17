@@ -1,54 +1,49 @@
----
-import fs from 'node:fs';
-import path from 'node:path';
-import { marked } from 'marked';
-import { load as parseYaml } from 'js-yaml';
 import '../styles/global.css';
 
-const raw = fs.readFileSync(path.resolve('./src/log.md'), 'utf-8');
+const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQu-ZcYsIJoKHI3s9KfnuM6qk3Oa-gElXhkUtSk1BfLFBoIFXsBaiZzYdqSoKhxlv_X40HqAAlGbjic/pub?gid=0&single=true&output=csv';
 
-// Remove optional frontmatter and hide ```log blocks from the visible writing.
-const markdownBody = raw.replace(/^---[\s\S]*?---\s*/, '');
-const visibleMarkdown = markdownBody.replace(/```log[\s\S]*?```/g, '').trim();
-const html = marked.parse(visibleMarkdown);
+async function fetchDayRecords() {
+  const res = await fetch(SHEET_CSV_URL);
+  const csvText = await res.text();
 
-// Parse dated sections like: ## 2026-08-15
-const sectionRegex = /##\s+(\d{4}-\d{2}-\d{2})([^\n]*)\n([\s\S]*?)(?=\n##\s+\d{4}-\d{2}-\d{2}|$)/g;
+  const lines = csvText.trim().split('\n');
+  const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
 
-const records = [...markdownBody.matchAll(sectionRegex)]
-  .map((match) => {
-    const date = match[1];
-    const section = match[3];
-    const logMatch = section.match(/```log\s*([\s\S]*?)```/);
+  return lines
+    .slice(1)
+    .map((line) => {
+      const cells = line.split(',').map((c) => c.trim());
+      const row = {};
+      headers.forEach((h, i) => (row[h] = cells[i]));
 
-    if (!logMatch) return null;
+      const date = row.date;
+      if (!date) return null;
 
-    const data = parseYaml(logMatch[1]) ?? {};
+      const listen_min = Number(row.listen_min ?? 0);
+      const read_min = Number(row.read_min ?? 0);
+      const read_chars = Number(row.read_chars ?? 0);
 
-    const listen_min = Number(data.listen_min ?? 0);
-    const read_min = Number(data.read_min ?? 0);
-    const read_chars = Number(data.read_chars ?? 0);
+      const total_input_min = listen_min + read_min;
+      const reading_density = read_min > 0 ? read_chars / read_min : null;
 
-    const total_input_min = listen_min + read_min;
-    const input = total_input_min;
-    const contact_day = total_input_min > 0;
-    const frictionless_minimum = total_input_min >= 5;
-    const reading_density = read_min > 0 ? read_chars / read_min : null;
+      return {
+        date,
+        listen_min,
+        read_min,
+        read_chars,
+        total_input_min,
+        input: total_input_min,
+        contact_day: total_input_min > 0,
+        frictionless_minimum: total_input_min >= 5,
+        reading_density,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
 
-    return {
-      date,
-      listen_min,
-      read_min,
-      read_chars,
-      total_input_min,
-      input,
-      contact_day,
-      frictionless_minimum,
-      reading_density,
-    };
-  })
-  .filter(Boolean)
-  .sort((a, b) => a.date.localeCompare(b.date));
+const records = await fetchDayRecords();
+
 
 function addDays(dateString, days) {
   const date = new Date(`${dateString}T00:00:00Z`);
