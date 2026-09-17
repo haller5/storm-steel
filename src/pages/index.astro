@@ -1,3 +1,4 @@
+---
 import '../styles/global.css';
 
 const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQu-ZcYsIJoKHI3s9KfnuM6qk3Oa-gElXhkUtSk1BfLFBoIFXsBaiZzYdqSoKhxlv_X40HqAAlGbjic/pub?gid=0&single=true&output=csv';
@@ -43,7 +44,6 @@ async function fetchDayRecords() {
 }
 
 const records = await fetchDayRecords();
-
 
 function addDays(dateString, days) {
   const date = new Date(`${dateString}T00:00:00Z`);
@@ -516,14 +516,13 @@ function contactLevel(day) {
 }
 
 // Calendar-grid layout (weeks as columns, Sun-Sat rows) instead of a flat strip.
-const calendarStart = weekdayIndexOf(last30[0].date);
-const paddedCalendar = [...Array.from({ length: calendarStart }, () => null), ...last30];
-const calendarWeeks = Math.ceil(paddedCalendar.length / 7);
-
 function weekdayIndexOf(dateString) {
   return new Date(`${dateString}T00:00:00Z`).getUTCDay();
 }
 
+const calendarStart = weekdayIndexOf(last30[0].date);
+const paddedCalendar = [...Array.from({ length: calendarStart }, () => null), ...last30];
+const calendarWeeks = Math.ceil(paddedCalendar.length / 7);
 ---
 
 <!doctype html>
