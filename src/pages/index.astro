@@ -120,12 +120,12 @@ const stabilityScore = Math.min(100, Math.max(0, 100 - instability * 100));
 const healthScore = Math.round((consistencyScore + momentumScore + stabilityScore) / 3);
 
 const healthTiers = [
-  { max: 0, label: 'unforged', color: '#8b9498' },
-  { max: 25, label: 'corroding', color: '#8b4a3d' },
-  { max: 45, label: 'fatigued', color: '#a67a3d' },
-  { max: 65, label: 'strained', color: '#9a9143' },
-  { max: 85, label: 'forged', color: '#4f6b78' },
-  { max: 101, label: 'tempered', color: '#2f4a56' },
+  { max: 0, label: 'unforged', color: '#9aa0a6' },
+  { max: 25, label: 'corroding', color: '#ef4444' },
+  { max: 45, label: 'fatigued', color: '#f97316' },
+  { max: 65, label: 'strained', color: '#f5b100' },
+  { max: 85, label: 'forged', color: '#2b6cee' },
+  { max: 101, label: 'tempered', color: '#16a34a' },
 ];
 
 function healthTier(score) {
@@ -149,7 +149,6 @@ function currentStreak(list, key) {
 }
 
 const contactStreak = currentStreak(days, 'contact_day');
-const streakDigits = String(Math.min(contactStreak, 999)).padStart(3, '0').split('');
 
 function daysSince(metric) {
   for (let i = days.length - 1; i >= 0; i--) {
@@ -223,160 +222,25 @@ const rollingSeries14 = chartDays.map((_, index) => {
   return average(days.slice(start, end), 'input');
 });
 
-const MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-
-function svgPressureGauge(score, opts = {}) {
-  const { width = 300, height = 210 } = opts;
-  const cx = width / 2;
-  const cy = height - 46;
-  const r = 105;
-
-  function polar(angleDeg, radius) {
-    const a = (angleDeg * Math.PI) / 180;
-    return { x: cx + radius * Math.cos(a), y: cy - radius * Math.sin(a) };
-  }
-
-  function arcPath(startAngle, endAngle, radius) {
-    const s = polar(startAngle, radius);
-    const e = polar(endAngle, radius);
-    const largeArc = Math.abs(startAngle - endAngle) > 180 ? 1 : 0;
-    return `M ${s.x.toFixed(1)} ${s.y.toFixed(1)} A ${radius} ${radius} 0 ${largeArc} 1 ${e.x.toFixed(1)} ${e.y.toFixed(1)}`;
-  }
-
-  function angleFor(v) {
-    return 180 - (v / 100) * 180;
-  }
-
-  const clamped = Math.min(Math.max(score, 0), 100);
-  const tier = healthTier(score);
-
-  const arcs = healthTiers
-    .slice(0, -1)
-    .map((t, i) => {
-      const lo = i === 0 ? 0 : healthTiers[i - 1].max;
-      const hi = Math.min(t.max, 100);
-      return `<path d="${arcPath(angleFor(lo), angleFor(hi), r - 3)}" fill="none" stroke="${t.color}" stroke-width="16" />`;
-    })
-    .join('');
-
-  const ticks = [0, 25, 45, 65, 85, 100]
-    .map((b) => {
-      const a = angleFor(b);
-      const p1 = polar(a, r + 10);
-      const p2 = polar(a, r + 18);
-      const lp = polar(a, r + 32);
-      return `<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}" stroke="var(--ink)" stroke-width="1.5" />
-<text x="${lp.x.toFixed(1)}" y="${lp.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-family="${MONO}" font-size="10" fill="var(--ink)">${b}</text>`;
-    })
-    .join('');
-
-  const needleAngle = angleFor(clamped);
-  const tip = polar(needleAngle, r - 22);
-
-  return `<svg viewBox="0 0 ${width} ${height}" class="pressure-svg" role="img" aria-label="immersion pressure gauge">
-  <circle cx="${cx}" cy="${cy}" r="${r + 20}" fill="none" stroke="var(--ink)" stroke-width="1" opacity="0.12" />
-  ${arcs}
-  ${ticks}
-  <line x1="${cx}" y1="${cy}" x2="${tip.x.toFixed(1)}" y2="${tip.y.toFixed(1)}" stroke="var(--ink)" stroke-width="3" stroke-linecap="round" />
-  <circle cx="${cx}" cy="${cy}" r="7" fill="var(--brass)" stroke="var(--ink)" stroke-width="1.5" />
-  <text x="${cx}" y="${cy + 34}" text-anchor="middle" font-family="${MONO}" font-size="26" font-weight="700" fill="var(--ink)">${Math.round(clamped)}</text>
-  <text x="${cx}" y="${cy + 54}" text-anchor="middle" font-family="${MONO}" font-size="12" fill="${tier.color}">${tier.label}</text>
-</svg>`;
-}
-
-const pressureGaugeSvg = svgPressureGauge(healthScore);
-
-const fluencyTiers = [
-  { max: 0, label: '—', color: '#8b9498' },
-  { max: 15, label: '(•‿•) flutter I', color: '#6f93a3' },
-  { max: 25, label: '( •_•) flutter II', color: '#5f8697' },
-  { max: 40, label: '( •̀_•́ ) wind I', color: '#4f7a8c' },
-  { max: 60, label: '(ง •̀_•́)ง wind II', color: '#3f6b7c' },
-  { max: 85, label: '(｀_´) hail I', color: '#6f7a5f' },
-  { max: 115, label: '(¬_¬) hail II', color: '#7c8a4f' },
-  { max: 150, label: '(ಠ_ಠ) gale I', color: '#8f8a3f' },
-  { max: 190, label: "(ง'̀-'́)ง gale II", color: '#a3853f' },
-  { max: 230, label: '(◉_◉) torrent I', color: '#b5751b' },
-  { max: 270, label: '(ง •̀_•́) torrent II', color: '#b06229' },
-  { max: 305, label: '( •̀_•́) tempest I', color: '#a94f2f' },
-  { max: 335, label: '(╯°□°）╯ tempest II', color: '#a13f3a' },
-  { max: 357, label: '(￣^￣)ゞ storm I', color: '#93384a' },
-  { max: 413, label: '(✧_✧) storm II', color: '#7d3560' },
-  { max: Infinity, label: 'ฅ(=✧ω✧=)ฅ STURM UND DRANG', color: '#5c2e73' },
-];
-
-function fluencyTier(charsPerMin) {
-  if (charsPerMin <= 0) return fluencyTiers[0];
-  return fluencyTiers.find((tier) => charsPerMin < tier.max) ?? fluencyTiers.at(-1);
-}
-
-function svgThermometer(value, opts = {}) {
-  const { width = 200, height = 300, maxScale = 450 } = opts;
-  const tubeX = width * 0.34;
-  const tubeTop = 20;
-  const tubeBottom = height - 60;
-  const tubeW = 20;
-  const bulbR = 18;
-  const bulbCy = tubeBottom + bulbR - 6;
-
-  const ratio = Math.min(Math.max(value, 0) / maxScale, 1);
-  const fillTop = tubeBottom - (tubeBottom - tubeTop) * ratio;
-
-  const tier = fluencyTier(value);
-  const color = tier.color;
-
-  const majorTicks = [0, 100, 200, 300, 400]
-    .filter((v) => v <= maxScale)
-    .map((v) => {
-      const y = tubeBottom - (tubeBottom - tubeTop) * (v / maxScale);
-      return `<line x1="${(tubeX - 11).toFixed(1)}" y1="${y.toFixed(1)}" x2="${tubeX.toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--ink)" stroke-width="1.6" />
-<text x="${(tubeX - 16).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="end" font-family="${MONO}" font-size="10" fill="var(--ink)">${v}</text>`;
-    })
-    .join('');
-
-  return `<svg viewBox="0 0 ${width} ${height}" class="thermo-svg" role="img" aria-label="reading fluency thermometer">
-  <rect x="${tubeX.toFixed(1)}" y="${tubeTop}" width="${tubeW}" height="${(tubeBottom - tubeTop).toFixed(1)}" rx="${tubeW / 2}" fill="var(--paper-dim)" stroke="var(--ink)" stroke-width="1.6" />
-  ${majorTicks}
-  <rect x="${(tubeX + 4).toFixed(1)}" y="${fillTop.toFixed(1)}" width="${tubeW - 8}" height="${(tubeBottom - fillTop + bulbR).toFixed(1)}" fill="${color}" />
-  <circle cx="${(tubeX + tubeW / 2).toFixed(1)}" cy="${bulbCy.toFixed(1)}" r="${bulbR}" fill="${color}" stroke="var(--ink)" stroke-width="1.6" />
-  <circle cx="${(tubeX + tubeW / 2).toFixed(1)}" cy="${fillTop.toFixed(1)}" r="3" fill="var(--ink)" />
-  <line x1="${(tubeX + tubeW + 6).toFixed(1)}" y1="${fillTop.toFixed(1)}" x2="${(tubeX + tubeW + 16).toFixed(1)}" y2="${fillTop.toFixed(1)}" stroke="var(--ink)" stroke-width="1.6" />
-  <text x="${(tubeX + tubeW + 20).toFixed(1)}" y="${(fillTop - 6).toFixed(1)}" font-family="${MONO}" font-size="15" font-weight="700" fill="var(--ink)">${Math.round(value)}</text>
-  <text x="${(tubeX + tubeW + 20).toFixed(1)}" y="${(fillTop + 12).toFixed(1)}" font-family="${MONO}" font-size="11" fill="${color}">${tier.label}</text>
-</svg>`;
-}
-
-const thermoSvg = svgThermometer(readingFluency7);
-
-function svgMiniBalanceBar(listenPct, readPct, opts = {}) {
-  const { width = 72, height = 10 } = opts;
-  const listenW = (width * listenPct) / 100;
-  const readW = width - listenW;
-  return `<svg viewBox="0 0 ${width} ${height}" class="mini-balance-svg" role="img" aria-label="listen vs read balance">
-  <rect x="0" y="0" width="${listenW.toFixed(1)}" height="${height}" fill="var(--storm)" />
-  <rect x="${listenW.toFixed(1)}" y="0" width="${readW.toFixed(1)}" height="${height}" fill="var(--brass)" />
-</svg>`;
-}
-
-const miniBalanceSvg = svgMiniBalanceBar(weeklyListeningPct, weeklyReadingPct);
+const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 
 function svgLineChart(values, labels, opts = {}) {
   const {
     width = 640,
-    height = 260,
+    height = 220,
     padLeft = 32,
     padRight = 12,
     padTop = 14,
     padBottom = 24,
-    color = 'var(--storm)',
+    color = '#2b6cee',
     showDots = true,
     showAxis = true,
-    yTicks = 5,
+    yTicks = 4,
     yMin = 0,
     yMax = null,
     maxMarker = null,
     overlay = null,
-    overlayColor = 'var(--brass)',
+    overlayColor = '#ff5a3c',
   } = opts;
 
   const innerW = width - padLeft - padRight;
@@ -413,30 +277,26 @@ function svgLineChart(values, labels, opts = {}) {
     });
   }
   const overlayEl = overlay
-    ? `<path d="${overlayPath}" fill="none" stroke="${overlayColor}" stroke-width="1.6" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round" />`
+    ? `<path d="${overlayPath}" fill="none" stroke="${overlayColor}" stroke-width="2" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round" />`
     : '';
 
   const baselineY = y(yMin);
-  const baselineLabel =
-    yMin !== 0
-      ? `<text x="${padLeft - 6}" y="${(baselineY + 3).toFixed(1)}" text-anchor="end" font-size="10" font-family="${MONO}" fill="var(--ink)" fill-opacity="0.65">${Math.round(yMin)}</text>`
-      : '';
-  const baseline = `<line x1="${padLeft}" y1="${baselineY.toFixed(1)}" x2="${width - padRight}" y2="${baselineY.toFixed(1)}" stroke="var(--ink)" stroke-opacity="0.7" stroke-width="1.4" />${baselineLabel}`;
+  const baseline = `<line x1="${padLeft}" y1="${baselineY.toFixed(1)}" x2="${width - padRight}" y2="${baselineY.toFixed(1)}" stroke="#1a1a1a" stroke-opacity="0.5" stroke-width="1.2" />`;
 
   const tickLines = showAxis
     ? Array.from({ length: yTicks }, (_, i) => {
         const value = yMin + (span / yTicks) * (i + 1);
         const gy = y(value);
-        return `<line x1="${padLeft}" y1="${gy.toFixed(1)}" x2="${width - padRight}" y2="${gy.toFixed(1)}" stroke="var(--ink)" stroke-opacity="0.1" stroke-width="1" />
-<text x="${padLeft - 6}" y="${(gy + 3).toFixed(1)}" text-anchor="end" font-size="10" font-family="${MONO}" fill="var(--ink)" fill-opacity="0.65">${Math.round(value)}</text>`;
+        return `<line x1="${padLeft}" y1="${gy.toFixed(1)}" x2="${width - padRight}" y2="${gy.toFixed(1)}" stroke="#1a1a1a" stroke-opacity="0.08" stroke-width="1" />
+<text x="${padLeft - 6}" y="${(gy + 3).toFixed(1)}" text-anchor="end" font-size="10" font-family="${MONO}" fill="#8a8a8a">${Math.round(value)}</text>`;
       }).join('')
     : '';
 
   const markerLine = maxMarker
     ? (() => {
         const my = y(maxMarker.value);
-        return `<line x1="${padLeft}" y1="${my.toFixed(1)}" x2="${width - padRight}" y2="${my.toFixed(1)}" stroke="var(--ink)" stroke-opacity="0.35" stroke-width="1.2" stroke-dasharray="0.1 6" stroke-linecap="round" />
-<text x="${padLeft - 6}" y="${(my + 3).toFixed(1)}" text-anchor="end" font-size="10" font-family="${MONO}" fill="var(--ink)" fill-opacity="0.65">${maxMarker.label}</text>`;
+        return `<line x1="${padLeft}" y1="${my.toFixed(1)}" x2="${width - padRight}" y2="${my.toFixed(1)}" stroke="#8a8a8a" stroke-width="1" stroke-dasharray="0.1 6" stroke-linecap="round" />
+<text x="${padLeft - 6}" y="${(my + 3).toFixed(1)}" text-anchor="end" font-size="10" font-family="${MONO}" fill="#8a8a8a">${maxMarker.label}</text>`;
       })()
     : '';
 
@@ -444,7 +304,7 @@ function svgLineChart(values, labels, opts = {}) {
     ? values
         .map((v, i) => {
           if (typeof v !== 'number' || !Number.isFinite(v)) return '';
-          return `<text x="${x(i).toFixed(1)}" y="${y(v).toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-family="${MONO}" font-size="17" font-weight="700" fill="${color}">*</text>`;
+          return `<text x="${x(i).toFixed(1)}" y="${y(v).toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-family="${MONO}" font-size="16" font-weight="700" fill="${color}">*</text>`;
         })
         .join('')
     : '';
@@ -452,15 +312,15 @@ function svgLineChart(values, labels, opts = {}) {
   const xLabels = labels
     .map((label, i) => {
       if (labels.length > 8 && i % 2 !== 0) return '';
-      return `<text x="${x(i).toFixed(1)}" y="${height - 6}" text-anchor="middle" font-size="10" font-family="${MONO}" fill="var(--ink)" fill-opacity="0.65">${label}</text>`;
+      return `<text x="${x(i).toFixed(1)}" y="${height - 6}" text-anchor="middle" font-size="10" font-family="${MONO}" fill="#8a8a8a">${label}</text>`;
     })
     .join('');
 
-  return `<svg viewBox="0 0 ${width} ${height}" class="chart-svg" role="img" aria-label="chart" preserveAspectRatio="xMidYMid meet">
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="chart" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:auto;">
   ${tickLines}
   ${baseline}
   ${markerLine}
-  <path d="${linePath}" fill="none" stroke="${color}" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="${linePath}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
   ${overlayEl}
   ${dots}
   ${xLabels}
@@ -472,6 +332,30 @@ const inputChartSvg = svgLineChart(
   chartDays.map((day) => day.date.slice(5)),
   { overlay: rollingSeries14, showAxis: false }
 );
+
+const fluencyTiers = [
+  { max: 0, label: '—', color: '#9aa0a6' },
+  { max: 15, label: '(•‿•) flutter I', color: '#2b6cee' },
+  { max: 25, label: '( •_•) flutter II', color: '#1e88e5' },
+  { max: 40, label: '( •̀_•́ ) wind I', color: '#00acc1' },
+  { max: 60, label: '(ง •̀_•́)ง wind II', color: '#00897b' },
+  { max: 85, label: '(｀_´) hail I', color: '#43a047' },
+  { max: 115, label: '(¬_¬) hail II', color: '#7cb342' },
+  { max: 150, label: '(ಠ_ಠ) gale I', color: '#c0ca33' },
+  { max: 190, label: "(ง'̀-'́)ง gale II", color: '#fdd835' },
+  { max: 230, label: '(◉_◉) torrent I', color: '#fb8c00' },
+  { max: 270, label: '(ง •̀_•́) torrent II', color: '#f4511e' },
+  { max: 305, label: '( •̀_•́) tempest I', color: '#e53935' },
+  { max: 335, label: '(╯°□°）╯ tempest II', color: '#d81b60' },
+  { max: 357, label: '(￣^￣)ゞ storm I', color: '#8e24aa' },
+  { max: 413, label: '(✧_✧) storm II', color: '#5e35b1' },
+  { max: Infinity, label: 'ฅ(=✧ω✧=)ฅ STURM UND DRANG', color: '#ffd600' },
+];
+
+function fluencyTier(charsPerMin) {
+  if (charsPerMin <= 0) return fluencyTiers[0];
+  return fluencyTiers.find((tier) => charsPerMin < tier.max) ?? fluencyTiers.at(-1);
+}
 
 const allTimeMaxFluencyDay = days.reduce((best, day) => {
   if (day.reading_density === null) return best;
@@ -498,7 +382,7 @@ const dailyFluencySvg = svgLineChart(
   chartDays.map((day) => day.reading_density),
   chartDays.map((day) => day.date.slice(5)),
   {
-    padLeft: 58,
+    padLeft: 34,
     yMin: fluencyAxisMin,
     yMax: fluencyAxisMax,
     showAxis: false,
@@ -507,6 +391,8 @@ const dailyFluencySvg = svgLineChart(
       : null,
   }
 );
+
+const fluencyRatio = Math.min(readingFluency7 / 450, 1) * 100;
 
 function weekdayIndexOf(dateString) {
   return new Date(`${dateString}T00:00:00Z`).getUTCDay();
@@ -526,7 +412,7 @@ const q25 = quantile(nonZeroInputs, 0.25);
 const q50 = quantile(nonZeroInputs, 0.5);
 const q75 = quantile(nonZeroInputs, 0.75);
 
-const heatColors = ['var(--paper-dim)', '#cfe0e6', '#8fb8c9', '#4f7a8c', '#2f4a56'];
+const heatColors = ['#ececec', '#bfdbfe', '#60a5fa', '#2b6cee', '#1e40af'];
 
 function heatColor(mins) {
   if (mins <= 0) return heatColors[0];
@@ -539,6 +425,9 @@ function heatColor(mins) {
 const heatmapStart = weekdayIndexOf(days[0].date);
 const paddedHeatmap = [...Array.from({ length: heatmapStart }, () => null), ...days];
 const heatmapWeeks = Math.ceil(paddedHeatmap.length / 7);
+
+const healthTierNow = healthTier(healthScore);
+const fluencyTierNow = fluencyTier(readingFluency7);
 ---
 
 <!doctype html>
@@ -548,107 +437,94 @@ const heatmapWeeks = Math.ceil(paddedHeatmap.length / 7);
     <meta name="viewport" content="width=device-width" />
     <meta name="color-scheme" content="light" />
     <title>storm-steel</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
   </head>
 
   <body>
     <main>
-      <section class="instruments">
-        <header class="nameplate">
-          <h1>storm-steel</h1>
-          <p class="eyebrow">reading &amp; listening instrument log · {firstDate} – {latestDate}</p>
+      <h1>storm-steel</h1>
+      <p class="sub">reading &amp; listening instrument log · {firstDate} – {latestDate}</p>
 
-          <div class="manifest">
-            <div>
-              <span class="manifest-label">7d input</span>
-              <span class="manifest-value">{formatNumber(rolling7)}m</span>
-            </div>
-            <div>
-              <span class="manifest-label">contact</span>
-              <span class="manifest-value">{contactDays30}/30</span>
-            </div>
-            <div>
-              <span class="manifest-label">balance</span>
-              <span class="manifest-value">
-                {Math.round(weeklyListeningPct)}L / {Math.round(weeklyReadingPct)}R
-                <span class="mini-balance-wrap" set:html={miniBalanceSvg} />
-              </span>
-            </div>
-            <div>
-              <span class="manifest-label">fluency momentum</span>
-              <span class="manifest-value">
-                {momentumArrow(fluencyMomentum)} {formatNumber(fluencyMomentum, 2)} {momentumLabel(fluencyMomentum)}
-              </span>
-            </div>
-          </div>
-        </header>
-
-        <div class="instrument-row">
-          <div class="panel">
-            <p class="panel-label">immersion pressure</p>
-            <div class="pressure-wrap" set:html={pressureGaugeSvg} />
-          </div>
-
-          <div class="panel">
-            <p class="panel-label">reading fluency</p>
-            <div class="thermo-wrap" set:html={thermoSvg} />
-          </div>
-
-          <div class="panel panel-odometer">
-            <p class="panel-label">contact streak</p>
-            <div class="odometer">
-              {streakDigits.map((d) => <span class="odometer-digit">{d}</span>)}
-            </div>
-            <p class="odometer-caption">days running</p>
-          </div>
+      <div class="stats">
+        <div>
+          <span class="stat-value">{formatNumber(rolling7)}m</span>
+          <span class="stat-label">7d input</span>
         </div>
-
-        <div class="panel barograph-panel">
-          <p class="panel-label">reading speed · chars/min</p>
-          <div class="chart-wrap" set:html={dailyFluencySvg} />
-          <p class="muted">gaps mark days with no reading</p>
+        <div>
+          <span class="stat-value" style="color:var(--blue)">{contactStreak}d</span>
+          <span class="stat-label">streak</span>
         </div>
-
-        <div class="panel barograph-panel">
-          <p class="panel-label">input minutes</p>
-          <div class="chart-wrap" set:html={inputChartSvg} />
-          <p class="muted">solid = daily · dashed = 7d rolling average</p>
+        <div>
+          <span class="stat-value">{contactDays30}/30</span>
+          <span class="stat-label">contact</span>
         </div>
-
-        <div class="panel ledger-panel">
-          <p class="panel-label">immersion log · full history</p>
-          <div class="heatmap" style={`grid-template-columns: repeat(${heatmapWeeks}, 15px)`}>
-            {paddedHeatmap.map((day) =>
-              day ? (
-                <span
-                  class="heatmap-cell"
-                  style={`background-color:${heatColor(day.input)}`}
-                  title={`${day.date} · ${Math.round(day.input)}m (${day.listen_min}L/${day.read_min}R)`}
-                />
-              ) : (
-                <span class="heatmap-cell empty" />
-              )
-            )}
-          </div>
-          <p class="muted">darker = more input that day · {contactDays30}/30 contact this month</p>
+        <div>
+          <span class="stat-value">
+            <span style="color:var(--blue)">{Math.round(weeklyListeningPct)}L</span>
+            /
+            <span style="color:var(--coral)">{Math.round(weeklyReadingPct)}R</span>
+          </span>
+          <span class="stat-label">balance</span>
         </div>
+      </div>
 
-        <details class="panel ledger-panel further-readings">
-          <summary>further readings</summary>
-          <pre>{`momentum               ${momentumArrow(momentum)} ${formatNumber(momentum, 2)} ${momentumLabel(momentum)}   (last 3d vs prior 7d)
+      <section>
+        <p class="label">immersion health</p>
+        <div class="bar">
+          <div class="bar-fill" style={`width:${Math.max(healthScore, 0)}%;background:${healthTierNow.color}`} />
+        </div>
+        <p class="readout" style={`color:${healthTierNow.color}`}>{healthScore} · {healthTierNow.label}</p>
+      </section>
+
+      <section>
+        <p class="label">reading fluency</p>
+        <div class="bar">
+          <div class="bar-fill" style={`width:${fluencyRatio}%;background:${fluencyTierNow.color}`} />
+        </div>
+        <p class="readout" style={`color:${fluencyTierNow.color}`}>
+          {fluencyTierNow.label} · momentum {momentumArrow(fluencyMomentum)} {formatNumber(fluencyMomentum, 2)} {momentumLabel(fluencyMomentum)}
+        </p>
+      </section>
+
+      <section>
+        <p class="label">reading speed · chars/min</p>
+        <div set:html={dailyFluencySvg} />
+        <p class="muted">gaps mark days with no reading</p>
+      </section>
+
+      <section>
+        <p class="label">input minutes</p>
+        <div set:html={inputChartSvg} />
+        <p class="muted">solid = daily · dashed = 7d rolling average</p>
+      </section>
+
+      <section>
+        <p class="label">contact</p>
+        <div class="heatmap" style={`grid-template-columns: repeat(${heatmapWeeks}, 12px)`}>
+          {paddedHeatmap.map((day) =>
+            day ? (
+              <span
+                class="heatmap-cell"
+                style={`background-color:${heatColor(day.input)}`}
+                title={`${day.date} · ${Math.round(day.input)}m (${day.listen_min}L/${day.read_min}R)`}
+              />
+            ) : (
+              <span class="heatmap-cell empty" />
+            )
+          )}
+        </div>
+        <p class="muted">darker blue = more input that day</p>
+      </section>
+
+      <details>
+        <summary>more</summary>
+        <pre>{`momentum               ${momentumArrow(momentum)} ${formatNumber(momentum, 2)} ${momentumLabel(momentum)}   (last 3d vs prior 7d)
 volatility             ${formatNumber(volatility)} ${volatilityLabel(volatility)}   (stdev, last 14d)
 instability            ${formatNumber(instability, 2)} ${instabilityLabel(instability)}   (volatility / 14d avg)
 
 last listen            ${formatDays(daysSinceListen)}
 last read              ${formatDays(daysSinceRead)}
 `}</pre>
-        </details>
-      </section>
+      </details>
     </main>
   </body>
 </html>
