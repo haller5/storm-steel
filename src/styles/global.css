@@ -61,7 +61,7 @@ h1 {
 }
 
 section {
-  margin-bottom: 32px;
+  margin-bottom: 36px;
 }
 
 .label {
@@ -82,10 +82,28 @@ section {
   border-radius: 7px;
 }
 
+.momentum-bar-wrap {
+  position: relative;
+}
+
+.momentum-bar-wrap .bar {
+  overflow: visible;
+}
+
+.momentum-tick {
+  position: absolute;
+  top: -3px;
+  height: 20px;
+  width: 2px;
+  background: #c2c2c2;
+  left: 50%;
+  transform: translateX(-1px);
+}
+
 .readout {
   margin: 8px 0 0;
-  font-weight: 700;
-  font-size: 1.1rem;
+  font-weight: 800;
+  font-size: 1.2rem;
 }
 
 .muted {
@@ -100,12 +118,14 @@ section {
   grid-template-rows: repeat(7, 12px);
   gap: 3px;
   overflow-x: auto;
+  padding-bottom: 4px;
 }
 
 .heatmap-cell {
   width: 12px;
   height: 12px;
   border-radius: 3px;
+  flex-shrink: 0;
 }
 
 .heatmap-cell.empty {
