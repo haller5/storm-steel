@@ -1,175 +1,259 @@
 :root {
-  --paper: #edede6;
-  --ink: #1c1c18;
-  --steel: #48545e;
-  --steel-soft: #d6d9d2;
-  --signal: #b5751b;
+  --plate: #1b1f22;
+  --paper: #e8e1d0;
+  --paper-dim: #ded5c0;
+  --ink: #26221d;
+  --rust: #8a4a2e;
+  --brass: #ab8b46;
+  --storm: #3f6b7c;
+  --radius-plate: 8px;
+  --radius-panel: 6px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--plate);
+  color: var(--ink);
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 body {
-  max-width: 760px;
-  margin: 0;
-  padding: 8px;
+  min-height: 100vh;
+  padding: 28px 16px 60px;
+  position: relative;
+}
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brass);
+  opacity: 0.45;
+}
+body::before {
+  top: 18px;
+  left: 18px;
+}
+body::after {
+  bottom: 18px;
+  right: 18px;
 }
 
 main {
-  max-width: 760px;
+  max-width: 720px;
+  margin: 0 auto;
 }
 
-pre {
-  overflow-x: auto;
-  white-space: pre;
+.instruments {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
-hr {
-  margin: 2em 0;
+.nameplate {
+  background: var(--paper);
+  border: 2px solid var(--brass);
+  border-radius: var(--radius-plate);
+  padding: 20px 24px;
 }
 
-blockquote {
-  margin-left: 1.5em;
-}
-
-.instruments h1 {
-  margin-bottom: 0.25em;
+.nameplate h1 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 700;
+  font-size: clamp(1.9rem, 5vw, 2.5rem);
+  margin: 0 0 6px;
+  color: var(--ink);
+  letter-spacing: -0.01em;
 }
 
 .eyebrow {
-  margin-top: 0.3em;
-  margin-bottom: 1.25em;
-  font-size: 0.95rem;
-  color: var(--steel);
-}
-
-.plain-label {
-  margin-top: 1.25em;
-  margin-bottom: 0.4em;
-  font-size: 1rem;
-  font-weight: normal;
-}
-
-.summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 0.3em 1.2em;
-}
-
-.summary p {
   margin: 0;
+  font-size: 0.8rem;
+  color: var(--storm);
 }
 
-.summary span {
-  display: block;
+.manifest {
+  display: flex;
+  flex-wrap: wrap;
+  background: var(--paper);
+  border-radius: var(--radius-panel);
+  padding: 14px 18px;
+}
+
+.manifest > div {
+  padding: 4px 16px;
+  border-left: 1px solid rgba(38, 34, 29, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 130px;
+}
+
+.manifest > div:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+
+.manifest-label {
+  font-size: 0.68rem;
+  color: rgba(38, 34, 29, 0.6);
+}
+
+.manifest-value {
   font-size: 0.95rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.summary strong {
-  font-size: 1.1rem;
-  font-weight: bold;
+.mini-balance-wrap svg {
+  display: block;
+  width: 60px;
+  height: 8px;
 }
 
-.fluency-badge {
-  --fc: var(--signal);
-  display: inline-block;
-  padding: 0.05em 0.35em;
-  background: color-mix(in srgb, var(--fc) 14%, var(--paper));
-  border: 1px solid var(--fc);
-  color: var(--fc);
+.instrument-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.panel {
+  background: var(--paper);
+  border-radius: var(--radius-panel);
+  border: 1px solid rgba(38, 34, 29, 0.15);
+  padding: 16px;
+}
+
+.panel-label {
+  margin: 0 0 10px;
+  font-size: 0.72rem;
+  color: rgba(38, 34, 29, 0.65);
+}
+
+.pressure-wrap svg,
+.thermo-wrap svg,
+.chart-wrap svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.panel-odometer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.odometer {
+  display: flex;
+  gap: 4px;
+  margin: 10px 0 6px;
+}
+
+.odometer-digit {
+  background: var(--ink);
+  color: var(--paper);
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 700;
+  font-size: 1.6rem;
+  width: 30px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+}
+
+.odometer-caption {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--rust);
+}
+
+.barograph-panel {
+  background-image: linear-gradient(rgba(38, 34, 29, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(38, 34, 29, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-color: var(--paper);
 }
 
 .muted {
-  margin-top: 0.35em;
-  font-size: 0.95rem;
+  margin: 8px 0 0;
+  font-size: 0.72rem;
+  color: rgba(38, 34, 29, 0.55);
 }
 
-.chart-wrap {
-  width: 100%;
-}
-
-.chart-svg {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-.health-wrap {
-  width: 100%;
-  max-width: 500px;
-}
-
-.health-svg {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-.gauge-wrap {
-  width: 100%;
-  max-width: 320px;
-}
-
-.gauge-svg {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-.heatmap {
+.ledger-panel .heatmap {
   display: grid;
   grid-auto-flow: column;
   grid-template-rows: repeat(7, 15px);
-  gap: 4px;
-  margin-top: 0.3em;
+  gap: 3px;
+  overflow-x: auto;
 }
 
 .heatmap-cell {
   width: 15px;
   height: 15px;
+  border-radius: 2px;
+  border: 1px solid rgba(38, 34, 29, 0.12);
 }
 
 .heatmap-cell.empty {
+  border: none;
   background: transparent;
 }
 
-.heatmap-cell.level-0 {
-  background: var(--steel-soft);
-}
-
-.heatmap-cell.level-1 {
-  background: #e8dcc0;
-}
-
-.heatmap-cell.level-2 {
-  background: var(--signal);
-}
-
-.balance-bar {
-  display: flex;
-  width: 100%;
-  max-width: 420px;
-  height: 16px;
-  border: 1px solid black;
-  margin-top: 0.25em;
-}
-
-.balance-listen {
-  background: black;
-}
-
-.balance-read {
-  background: #d9d9d9;
-}
-
-.more-metrics {
-  margin-top: 1em;
-}
-
-.more-metrics summary {
+.further-readings summary {
   cursor: pointer;
+  font-size: 0.72rem;
+  color: rgba(38, 34, 29, 0.65);
+  list-style: none;
 }
 
-article h2 {
-  font-size: 1rem;
-  font-weight: bold;
-  margin-top: 1.25em;
-  margin-bottom: 0.75em;
+.further-readings summary::-webkit-details-marker {
+  display: none;
+}
+
+.further-readings summary::before {
+  content: '▸ ';
+  color: var(--brass);
+}
+
+.further-readings[open] summary::before {
+  content: '▾ ';
+}
+
+.further-readings pre {
+  margin: 12px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .nameplate {
+    padding: 16px 18px;
+  }
+  .manifest > div {
+    min-width: 44%;
+  }
 }
