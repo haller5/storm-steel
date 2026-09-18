@@ -112,25 +112,6 @@ section {
   color: var(--muted);
 }
 
-.heatmap {
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(7, 12px);
-  gap: 3px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-}
-
-.heatmap-cell {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
-.heatmap-cell.empty {
-  background: transparent;
-}
 
 details summary {
   cursor: pointer;
