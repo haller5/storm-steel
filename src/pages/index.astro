@@ -98,14 +98,17 @@ const days = Array.from({ length: daysBetween(firstDate, latestDate) + 1 }, (_, 
   return byDate.get(date) ?? blankDay(date);
 });
 
-// Full calendar-year heatmap (Anki/GitHub-style), independent of the logged
-// range used for the stats below — always the trailing 365 days ending today.
+// Full calendar-year heatmap (Jan 1 - Dec 31 of the current year), independent
+// of the logged range used for the stats below.
 const todayStr = new Date().toISOString().slice(0, 10);
-const yearStart = addDays(todayStr, -364);
-const yearDays = Array.from({ length: 365 }, (_, index) => {
-  const date = addDays(yearStart, index);
+const currentYear = new Date().getUTCFullYear();
+const yearStartStr = `${currentYear}-01-01`;
+const yearEndStr = `${currentYear}-12-31`;
+const yearDays = Array.from({ length: daysBetween(yearStartStr, yearEndStr) + 1 }, (_, index) => {
+  const date = addDays(yearStartStr, index);
   return byDate.get(date) ?? blankDay(date);
 });
+
 
 const last7 = days.slice(-7);
 const last14 = days.slice(-14);
@@ -467,6 +470,57 @@ function heatColor(mins) {
 const heatmapStart = weekdayIndexOf(yearDays[0].date);
 const paddedHeatmap = [...Array.from({ length: heatmapStart }, () => null), ...yearDays];
 const heatmapWeeks = Math.ceil(paddedHeatmap.length / 7);
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function svgHeatmap(paddedDays, weeks, todayDate) {
+  const cell = 11;
+  const gap = 2;
+  const top = 14;
+  const width = weeks * (cell + gap) - gap;
+  const height = top + 7 * (cell + gap) - gap;
+
+  let lastMonth = null;
+  const monthEls = [];
+  for (let c = 0; c < weeks; c++) {
+    for (let r = 0; r < 7; r++) {
+      const day = paddedDays[c * 7 + r];
+      if (day) {
+        const month = day.date.slice(5, 7);
+        if (month !== lastMonth) {
+          lastMonth = month;
+          monthEls.push(
+            `<text x="${c * (cell + gap)}" y="10" font-size="9" font-family="${MONO}" fill="#9a9a9a">${MONTH_NAMES[parseInt(month, 10) - 1]}</text>`
+          );
+        }
+        break;
+      }
+    }
+  }
+
+  const cellEls = paddedDays
+    .map((day, idx) => {
+      if (!day) return '';
+      const c = Math.floor(idx / 7);
+      const r = idx % 7;
+      const x = c * (cell + gap);
+      const y = top + r * (cell + gap);
+      const isToday = day.date === todayDate;
+      const fill = heatColor(day.input);
+      const stroke = isToday ? '#1a1a1a' : 'none';
+      const strokeWidth = isToday ? 1.8 : 0;
+      return `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"><title>${day.date} · ${Math.round(day.input)}m${isToday ? ' · today' : ''}</title></rect>`;
+    })
+    .join('');
+
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="full year contact heatmap" style="display:block;width:100%;height:auto;">
+  ${monthEls.join('')}
+  ${cellEls}
+</svg>`;
+}
+
+const heatmapSvg = svgHeatmap(paddedHeatmap, heatmapWeeks, todayStr);
+
 ---
 
 <!doctype html>
@@ -505,22 +559,11 @@ const heatmapWeeks = Math.ceil(paddedHeatmap.length / 7);
       </div>
 
       <section>
-        <p class="label">contact · past year</p>
-        <div class="heatmap" style={`grid-template-columns: repeat(${heatmapWeeks}, 12px)`}>
-          {paddedHeatmap.map((day) =>
-            day ? (
-              <span
-                class="heatmap-cell"
-                style={`background-color:${heatColor(day.input)}`}
-                title={`${day.date} · ${Math.round(day.input)}m (${day.listen_min}L/${day.read_min}R)`}
-              />
-            ) : (
-              <span class="heatmap-cell empty" />
-            )
-          )}
-        </div>
-        <p class="muted">darker = more input that day</p>
+        <p class="label">contact · {currentYear}</p>
+        <div set:html={heatmapSvg} />
+        <p class="muted">darker = more input that day · outlined cell = today</p>
       </section>
+
 
       <section>
         <p class="label">reading fluency</p>
