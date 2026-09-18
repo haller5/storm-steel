@@ -225,7 +225,6 @@ const rollingSeries14 = chartDays.map((_, index) => {
 
 const MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 
-// Semi-circle barometer-style dial for the composite health score.
 function svgPressureGauge(score, opts = {}) {
   const { width = 300, height = 210 } = opts;
   const cx = width / 2;
@@ -287,7 +286,6 @@ function svgPressureGauge(score, opts = {}) {
 
 const pressureGaugeSvg = svgPressureGauge(healthScore);
 
-// Vertical thermometer for reading fluency, ticked at each named tier.
 const fluencyTiers = [
   { max: 0, label: '—', color: '#8b9498' },
   { max: 15, label: '(•‿•) flutter I', color: '#6f93a3' },
@@ -327,16 +325,6 @@ function svgThermometer(value, opts = {}) {
   const tier = fluencyTier(value);
   const color = tier.color;
 
-  const minorTicks = fluencyTiers
-    .slice(1)
-    .map((t) => t.max)
-    .filter((b) => Number.isFinite(b) && b <= maxScale)
-    .map((b) => {
-      const y = tubeBottom - (tubeBottom - tubeTop) * (b / maxScale);
-      return `<line x1="${(tubeX - 5).toFixed(1)}" y1="${y.toFixed(1)}" x2="${tubeX.toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--ink)" stroke-width="1" opacity="0.5" />`;
-    })
-    .join('');
-
   const majorTicks = [0, 100, 200, 300, 400]
     .filter((v) => v <= maxScale)
     .map((v) => {
@@ -348,7 +336,6 @@ function svgThermometer(value, opts = {}) {
 
   return `<svg viewBox="0 0 ${width} ${height}" class="thermo-svg" role="img" aria-label="reading fluency thermometer">
   <rect x="${tubeX.toFixed(1)}" y="${tubeTop}" width="${tubeW}" height="${(tubeBottom - tubeTop).toFixed(1)}" rx="${tubeW / 2}" fill="var(--paper-dim)" stroke="var(--ink)" stroke-width="1.6" />
-  ${minorTicks}
   ${majorTicks}
   <rect x="${(tubeX + 4).toFixed(1)}" y="${fillTop.toFixed(1)}" width="${tubeW - 8}" height="${(tubeBottom - fillTop + bulbR).toFixed(1)}" fill="${color}" />
   <circle cx="${(tubeX + tubeW / 2).toFixed(1)}" cy="${bulbCy.toFixed(1)}" r="${bulbR}" fill="${color}" stroke="var(--ink)" stroke-width="1.6" />
@@ -483,7 +470,7 @@ function svgLineChart(values, labels, opts = {}) {
 const inputChartSvg = svgLineChart(
   chartDays.map((day) => day.input),
   chartDays.map((day) => day.date.slice(5)),
-  { overlay: rollingSeries14 }
+  { overlay: rollingSeries14, showAxis: false }
 );
 
 const allTimeMaxFluencyDay = days.reduce((best, day) => {
@@ -575,31 +562,31 @@ const heatmapWeeks = Math.ceil(paddedHeatmap.length / 7);
         <header class="nameplate">
           <h1>storm-steel</h1>
           <p class="eyebrow">reading &amp; listening instrument log · {firstDate} – {latestDate}</p>
-        </header>
 
-        <div class="manifest">
-          <div>
-            <span class="manifest-label">7d input</span>
-            <span class="manifest-value">{formatNumber(rolling7)}m</span>
+          <div class="manifest">
+            <div>
+              <span class="manifest-label">7d input</span>
+              <span class="manifest-value">{formatNumber(rolling7)}m</span>
+            </div>
+            <div>
+              <span class="manifest-label">contact</span>
+              <span class="manifest-value">{contactDays30}/30</span>
+            </div>
+            <div>
+              <span class="manifest-label">balance</span>
+              <span class="manifest-value">
+                {Math.round(weeklyListeningPct)}L / {Math.round(weeklyReadingPct)}R
+                <span class="mini-balance-wrap" set:html={miniBalanceSvg} />
+              </span>
+            </div>
+            <div>
+              <span class="manifest-label">fluency momentum</span>
+              <span class="manifest-value">
+                {momentumArrow(fluencyMomentum)} {formatNumber(fluencyMomentum, 2)} {momentumLabel(fluencyMomentum)}
+              </span>
+            </div>
           </div>
-          <div>
-            <span class="manifest-label">contact</span>
-            <span class="manifest-value">{contactDays30}/30</span>
-          </div>
-          <div>
-            <span class="manifest-label">balance</span>
-            <span class="manifest-value">
-              {Math.round(weeklyListeningPct)}L / {Math.round(weeklyReadingPct)}R
-              <span class="mini-balance-wrap" set:html={miniBalanceSvg} />
-            </span>
-          </div>
-          <div>
-            <span class="manifest-label">fluency momentum</span>
-            <span class="manifest-value">
-              {momentumArrow(fluencyMomentum)} {formatNumber(fluencyMomentum, 2)} {momentumLabel(fluencyMomentum)}
-            </span>
-          </div>
-        </div>
+        </header>
 
         <div class="instrument-row">
           <div class="panel">
