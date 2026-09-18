@@ -80,10 +80,8 @@ const latestDate = records.at(-1)?.date ?? new Date().toISOString().slice(0, 10)
 const firstDate = records.at(0)?.date ?? latestDate;
 const byDate = new Map(records.map((record) => [record.date, record]));
 
-const days = Array.from({ length: daysBetween(firstDate, latestDate) + 1 }, (_, index) => {
-  const date = addDays(firstDate, index);
-
-  return byDate.get(date) ?? {
+function blankDay(date) {
+  return {
     date,
     listen_min: 0,
     read_min: 0,
@@ -93,6 +91,20 @@ const days = Array.from({ length: daysBetween(firstDate, latestDate) + 1 }, (_, 
     contact_day: false,
     reading_density: null,
   };
+}
+
+const days = Array.from({ length: daysBetween(firstDate, latestDate) + 1 }, (_, index) => {
+  const date = addDays(firstDate, index);
+  return byDate.get(date) ?? blankDay(date);
+});
+
+// Full calendar-year heatmap (Anki/GitHub-style), independent of the logged
+// range used for the stats below — always the trailing 365 days ending today.
+const todayStr = new Date().toISOString().slice(0, 10);
+const yearStart = addDays(todayStr, -364);
+const yearDays = Array.from({ length: 365 }, (_, index) => {
+  const date = addDays(yearStart, index);
+  return byDate.get(date) ?? blankDay(date);
 });
 
 const last7 = days.slice(-7);
@@ -112,26 +124,6 @@ const momentum = safeRatio(avgLast3, avgPrevious7BeforeLast3);
 
 const volatility = stddev(last14.map((day) => day.input));
 const instability = safeRatio(volatility, rolling14);
-
-const contactDays14 = last14.filter((day) => day.contact_day).length;
-const consistencyScore = last14.length > 0 ? (contactDays14 / last14.length) * 100 : 0;
-const momentumScore = Math.min(100, Math.max(0, 50 + (momentum - 1) * 100));
-const stabilityScore = Math.min(100, Math.max(0, 100 - instability * 100));
-const healthScore = Math.round((consistencyScore + momentumScore + stabilityScore) / 3);
-
-const healthTiers = [
-  { max: 0, label: 'unforged', color: '#9aa0a6' },
-  { max: 25, label: 'corroding', color: '#ef4444' },
-  { max: 45, label: 'fatigued', color: '#f97316' },
-  { max: 65, label: 'strained', color: '#f5b100' },
-  { max: 85, label: 'forged', color: '#2b6cee' },
-  { max: 101, label: 'tempered', color: '#16a34a' },
-];
-
-function healthTier(score) {
-  if (score <= 0) return healthTiers[0];
-  return healthTiers.find((tier) => score < tier.max) ?? healthTiers.at(-1);
-}
 
 const weeklyListen = sum(last7, 'listen_min');
 const weeklyRead = sum(last7, 'read_min');
@@ -202,6 +194,12 @@ function momentumArrow(value) {
   return '▪';
 }
 
+function momentumColor(value) {
+  if (value >= 1.1) return '#16a34a';
+  if (value <= 0.9) return '#ff5a3c';
+  return '#9a9a9a';
+}
+
 function volatilityLabel(value) {
   if (value <= 10) return 'steady';
   if (value <= 30) return 'uneven';
@@ -222,7 +220,7 @@ const rollingSeries14 = chartDays.map((_, index) => {
   return average(days.slice(start, end), 'input');
 });
 
-const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
 function svgLineChart(values, labels, opts = {}) {
   const {
@@ -232,7 +230,8 @@ function svgLineChart(values, labels, opts = {}) {
     padRight = 12,
     padTop = 14,
     padBottom = 24,
-    color = '#2b6cee',
+    color = '#ff6b4a',
+    fillColor = null,
     showDots = true,
     showAxis = true,
     yTicks = 4,
@@ -240,9 +239,11 @@ function svgLineChart(values, labels, opts = {}) {
     yMax = null,
     maxMarker = null,
     overlay = null,
-    overlayColor = '#ff5a3c',
+    overlayColor = '#8b5cf6',
+    gradientId = 'chartGradient',
   } = opts;
 
+  const fill = fillColor ?? color;
   const innerW = width - padLeft - padRight;
   const innerH = height - padTop - padBottom;
   const numericValues = values.filter((v) => typeof v === 'number' && Number.isFinite(v));
@@ -252,77 +253,118 @@ function svgLineChart(values, labels, opts = {}) {
 
   const x = (i) => padLeft + (values.length <= 1 ? 0 : (i / (values.length - 1)) * innerW);
   const y = (v) => padTop + innerH - ((v - yMin) / span) * innerH;
+  const baselineY = y(yMin);
 
-  let linePath = '';
-  let broken = true;
+  const runs = [];
+  let current = [];
   values.forEach((v, i) => {
     if (typeof v !== 'number' || !Number.isFinite(v)) {
-      broken = true;
+      if (current.length) runs.push(current);
+      current = [];
       return;
     }
-    linePath += `${broken ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)} `;
-    broken = false;
+    current.push({ x: x(i), y: y(v) });
   });
+  if (current.length) runs.push(current);
 
-  let overlayPath = '';
-  if (overlay) {
-    let brokenOverlay = true;
-    overlay.forEach((v, i) => {
-      if (typeof v !== 'number' || !Number.isFinite(v)) {
-        brokenOverlay = true;
-        return;
-      }
-      overlayPath += `${brokenOverlay ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)} `;
-      brokenOverlay = false;
-    });
+  function smoothLine(points) {
+    if (points.length < 2) return '';
+    let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)} `;
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[i - 1] || points[i];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = points[i + 2] || p2;
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      d += `C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)} `;
+    }
+    return d;
   }
-  const overlayEl = overlay
-    ? `<path d="${overlayPath}" fill="none" stroke="${overlayColor}" stroke-width="2" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round" />`
+
+  const lineEls = runs
+    .map((run) => `<path d="${smoothLine(run)}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />`)
+    .join('');
+
+  const areaEls = runs
+    .map((run) => {
+      if (run.length < 2) return '';
+      const d = `${smoothLine(run)} L ${run[run.length - 1].x.toFixed(1)},${baselineY.toFixed(1)} L ${run[0].x.toFixed(1)},${baselineY.toFixed(1)} Z`;
+      return `<path d="${d}" fill="url(#${gradientId})" stroke="none" />`;
+    })
+    .join('');
+
+  const dotEls = showDots
+    ? runs
+        .flat()
+        .map((p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.2" fill="${color}" stroke="#fefcf8" stroke-width="1.4" />`)
+        .join('')
     : '';
 
-  const baselineY = y(yMin);
-  const baseline = `<line x1="${padLeft}" y1="${baselineY.toFixed(1)}" x2="${width - padRight}" y2="${baselineY.toFixed(1)}" stroke="#1a1a1a" stroke-opacity="0.5" stroke-width="1.2" />`;
+  let overlayEl = '';
+  if (overlay) {
+    const oRuns = [];
+    let oCurrent = [];
+    overlay.forEach((v, i) => {
+      if (typeof v !== 'number' || !Number.isFinite(v)) {
+        if (oCurrent.length) oRuns.push(oCurrent);
+        oCurrent = [];
+        return;
+      }
+      oCurrent.push({ x: x(i), y: y(v) });
+    });
+    if (oCurrent.length) oRuns.push(oCurrent);
+    overlayEl = oRuns
+      .map((run) => `<path d="${smoothLine(run)}" fill="none" stroke="${overlayColor}" stroke-width="2" stroke-dasharray="5 4" stroke-linecap="round" />`)
+      .join('');
+  }
+
+  const baselineLabel =
+    yMin !== 0
+      ? `<text x="${padLeft - 6}" y="${(baselineY + 3).toFixed(1)}" text-anchor="end" font-size="10" font-family="${MONO}" fill="#9a9a9a">${Math.round(yMin)}</text>`
+      : '';
+  const baseline = `<line x1="${padLeft}" y1="${baselineY.toFixed(1)}" x2="${width - padRight}" y2="${baselineY.toFixed(1)}" stroke="#d8d8d8" stroke-width="1.2" />${baselineLabel}`;
 
   const tickLines = showAxis
     ? Array.from({ length: yTicks }, (_, i) => {
         const value = yMin + (span / yTicks) * (i + 1);
         const gy = y(value);
-        return `<line x1="${padLeft}" y1="${gy.toFixed(1)}" x2="${width - padRight}" y2="${gy.toFixed(1)}" stroke="#1a1a1a" stroke-opacity="0.08" stroke-width="1" />
-<text x="${padLeft - 6}" y="${(gy + 3).toFixed(1)}" text-anchor="end" font-size="10" font-family="${MONO}" fill="#8a8a8a">${Math.round(value)}</text>`;
+        return `<line x1="${padLeft}" y1="${gy.toFixed(1)}" x2="${width - padRight}" y2="${gy.toFixed(1)}" stroke="#eeeeee" stroke-width="1" />
+<text x="${padLeft - 6}" y="${(gy + 3).toFixed(1)}" text-anchor="end" font-size="10" font-family="${MONO}" fill="#9a9a9a">${Math.round(value)}</text>`;
       }).join('')
     : '';
 
   const markerLine = maxMarker
     ? (() => {
         const my = y(maxMarker.value);
-        return `<line x1="${padLeft}" y1="${my.toFixed(1)}" x2="${width - padRight}" y2="${my.toFixed(1)}" stroke="#8a8a8a" stroke-width="1" stroke-dasharray="0.1 6" stroke-linecap="round" />
-<text x="${padLeft - 6}" y="${(my + 3).toFixed(1)}" text-anchor="end" font-size="10" font-family="${MONO}" fill="#8a8a8a">${maxMarker.label}</text>`;
+        return `<line x1="${padLeft}" y1="${my.toFixed(1)}" x2="${width - padRight}" y2="${my.toFixed(1)}" stroke="#c9c9c9" stroke-width="1.2" stroke-dasharray="0.1 6" stroke-linecap="round" />
+<text x="${padLeft - 6}" y="${(my + 3).toFixed(1)}" text-anchor="end" font-size="10" font-family="${MONO}" fill="#9a9a9a">${maxMarker.label}</text>`;
       })()
-    : '';
-
-  const dots = showDots
-    ? values
-        .map((v, i) => {
-          if (typeof v !== 'number' || !Number.isFinite(v)) return '';
-          return `<text x="${x(i).toFixed(1)}" y="${y(v).toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-family="${MONO}" font-size="16" font-weight="700" fill="${color}">*</text>`;
-        })
-        .join('')
     : '';
 
   const xLabels = labels
     .map((label, i) => {
       if (labels.length > 8 && i % 2 !== 0) return '';
-      return `<text x="${x(i).toFixed(1)}" y="${height - 6}" text-anchor="middle" font-size="10" font-family="${MONO}" fill="#8a8a8a">${label}</text>`;
+      return `<text x="${x(i).toFixed(1)}" y="${height - 6}" text-anchor="middle" font-size="10" font-family="${MONO}" fill="#9a9a9a">${label}</text>`;
     })
     .join('');
 
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="chart" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:auto;">
+  <defs>
+    <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${fill}" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="${fill}" stop-opacity="0" />
+    </linearGradient>
+  </defs>
   ${tickLines}
   ${baseline}
   ${markerLine}
-  <path d="${linePath}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+  ${areaEls}
+  ${lineEls}
   ${overlayEl}
-  ${dots}
+  ${dotEls}
   ${xLabels}
 </svg>`;
 }
@@ -330,11 +372,11 @@ function svgLineChart(values, labels, opts = {}) {
 const inputChartSvg = svgLineChart(
   chartDays.map((day) => day.input),
   chartDays.map((day) => day.date.slice(5)),
-  { overlay: rollingSeries14, showAxis: false }
+  { overlay: rollingSeries14, color: '#ff6b4a', overlayColor: '#8b5cf6', gradientId: 'gradInput' }
 );
 
 const fluencyTiers = [
-  { max: 0, label: '—', color: '#9aa0a6' },
+  { max: 0, label: '—', color: '#8b9498' },
   { max: 15, label: '(•‿•) flutter I', color: '#2b6cee' },
   { max: 25, label: '( •_•) flutter II', color: '#1e88e5' },
   { max: 40, label: '( •̀_•́ ) wind I', color: '#00acc1' },
@@ -342,14 +384,14 @@ const fluencyTiers = [
   { max: 85, label: '(｀_´) hail I', color: '#43a047' },
   { max: 115, label: '(¬_¬) hail II', color: '#7cb342' },
   { max: 150, label: '(ಠ_ಠ) gale I', color: '#c0ca33' },
-  { max: 190, label: "(ง'̀-'́)ง gale II", color: '#fdd835' },
+  { max: 190, label: "(ง'̀-'́)ง gale II", color: '#f9a825' },
   { max: 230, label: '(◉_◉) torrent I', color: '#fb8c00' },
   { max: 270, label: '(ง •̀_•́) torrent II', color: '#f4511e' },
   { max: 305, label: '( •̀_•́) tempest I', color: '#e53935' },
   { max: 335, label: '(╯°□°）╯ tempest II', color: '#d81b60' },
   { max: 357, label: '(￣^￣)ゞ storm I', color: '#8e24aa' },
   { max: 413, label: '(✧_✧) storm II', color: '#5e35b1' },
-  { max: Infinity, label: 'ฅ(=✧ω✧=)ฅ STURM UND DRANG', color: '#ffd600' },
+  { max: Infinity, label: 'ฅ(=✧ω✧=)ฅ STURM UND DRANG', color: '#3949ab' },
 ];
 
 function fluencyTier(charsPerMin) {
@@ -382,23 +424,23 @@ const dailyFluencySvg = svgLineChart(
   chartDays.map((day) => day.reading_density),
   chartDays.map((day) => day.date.slice(5)),
   {
-    padLeft: 34,
+    padLeft: 44,
     yMin: fluencyAxisMin,
     yMax: fluencyAxisMax,
     showAxis: false,
+    color: '#14b8a6',
+    gradientId: 'gradFluency',
     maxMarker: allTimeMaxFluencyDay
       ? { value: allTimeMaxFluencyDay.reading_density, label: formatShortDate(allTimeMaxFluencyDay.date) }
       : null,
   }
 );
 
-const fluencyRatio = Math.min(readingFluency7 / 450, 1) * 100;
-
 function weekdayIndexOf(dateString) {
   return new Date(`${dateString}T00:00:00Z`).getUTCDay();
 }
 
-const nonZeroInputs = days.map((d) => d.input).filter((v) => v > 0).sort((a, b) => a - b);
+const nonZeroInputs = yearDays.map((d) => d.input).filter((v) => v > 0).sort((a, b) => a - b);
 
 function quantile(arr, q) {
   if (!arr.length) return 0;
@@ -412,7 +454,7 @@ const q25 = quantile(nonZeroInputs, 0.25);
 const q50 = quantile(nonZeroInputs, 0.5);
 const q75 = quantile(nonZeroInputs, 0.75);
 
-const heatColors = ['#ececec', '#bfdbfe', '#60a5fa', '#2b6cee', '#1e40af'];
+const heatColors = ['#f4f4f4', '#ffd9cc', '#ffab8c', '#ff7a52', '#e8491f'];
 
 function heatColor(mins) {
   if (mins <= 0) return heatColors[0];
@@ -422,12 +464,9 @@ function heatColor(mins) {
   return heatColors[4];
 }
 
-const heatmapStart = weekdayIndexOf(days[0].date);
-const paddedHeatmap = [...Array.from({ length: heatmapStart }, () => null), ...days];
+const heatmapStart = weekdayIndexOf(yearDays[0].date);
+const paddedHeatmap = [...Array.from({ length: heatmapStart }, () => null), ...yearDays];
 const heatmapWeeks = Math.ceil(paddedHeatmap.length / 7);
-
-const healthTierNow = healthTier(healthScore);
-const fluencyTierNow = fluencyTier(readingFluency7);
 ---
 
 <!doctype html>
@@ -446,59 +485,27 @@ const fluencyTierNow = fluencyTier(readingFluency7);
 
       <div class="stats">
         <div>
-          <span class="stat-value">{formatNumber(rolling7)}m</span>
+          <span class="stat-value" style="color:#ff6b4a">{formatNumber(rolling7)}m</span>
           <span class="stat-label">7d input</span>
         </div>
         <div>
-          <span class="stat-value" style="color:var(--blue)">{contactStreak}d</span>
+          <span class="stat-value" style="color:#8b5cf6">{contactStreak}d</span>
           <span class="stat-label">streak</span>
         </div>
         <div>
-          <span class="stat-value">{contactDays30}/30</span>
+          <span class="stat-value" style="color:#14b8a6">{contactDays30}/30</span>
           <span class="stat-label">contact</span>
         </div>
         <div>
           <span class="stat-value">
-            <span style="color:var(--blue)">{Math.round(weeklyListeningPct)}L</span>
-            /
-            <span style="color:var(--coral)">{Math.round(weeklyReadingPct)}R</span>
+            <span style="color:#2b6cee">{Math.round(weeklyListeningPct)}L</span>/<span style="color:#ff5a3c">{Math.round(weeklyReadingPct)}R</span>
           </span>
           <span class="stat-label">balance</span>
         </div>
       </div>
 
       <section>
-        <p class="label">immersion health</p>
-        <div class="bar">
-          <div class="bar-fill" style={`width:${Math.max(healthScore, 0)}%;background:${healthTierNow.color}`} />
-        </div>
-        <p class="readout" style={`color:${healthTierNow.color}`}>{healthScore} · {healthTierNow.label}</p>
-      </section>
-
-      <section>
-        <p class="label">reading fluency</p>
-        <div class="bar">
-          <div class="bar-fill" style={`width:${fluencyRatio}%;background:${fluencyTierNow.color}`} />
-        </div>
-        <p class="readout" style={`color:${fluencyTierNow.color}`}>
-          {fluencyTierNow.label} · momentum {momentumArrow(fluencyMomentum)} {formatNumber(fluencyMomentum, 2)} {momentumLabel(fluencyMomentum)}
-        </p>
-      </section>
-
-      <section>
-        <p class="label">reading speed · chars/min</p>
-        <div set:html={dailyFluencySvg} />
-        <p class="muted">gaps mark days with no reading</p>
-      </section>
-
-      <section>
-        <p class="label">input minutes</p>
-        <div set:html={inputChartSvg} />
-        <p class="muted">solid = daily · dashed = 7d rolling average</p>
-      </section>
-
-      <section>
-        <p class="label">contact</p>
+        <p class="label">contact · past year</p>
         <div class="heatmap" style={`grid-template-columns: repeat(${heatmapWeeks}, 12px)`}>
           {paddedHeatmap.map((day) =>
             day ? (
@@ -512,7 +519,36 @@ const fluencyTierNow = fluencyTier(readingFluency7);
             )
           )}
         </div>
-        <p class="muted">darker blue = more input that day</p>
+        <p class="muted">darker = more input that day</p>
+      </section>
+
+      <section>
+        <p class="label">reading fluency</p>
+        <p class="readout" style={`color:${fluencyTier(readingFluency7).color}`}>{fluencyTier(readingFluency7).label}</p>
+        <div class="momentum-bar-wrap">
+          <div class="bar">
+            <div
+              class="bar-fill"
+              style={`width:${Math.min(Math.max(fluencyMomentum / 2, 0), 1) * 100}%;background:${momentumColor(fluencyMomentum)}`}
+            />
+          </div>
+          <div class="momentum-tick" />
+        </div>
+        <p class="muted">
+          momentum {momentumArrow(fluencyMomentum)} {formatNumber(fluencyMomentum, 2)} {momentumLabel(fluencyMomentum)}
+        </p>
+      </section>
+
+      <section>
+        <p class="label">reading speed · chars/min</p>
+        <div set:html={dailyFluencySvg} />
+        <p class="muted">gaps mark days with no reading</p>
+      </section>
+
+      <section>
+        <p class="label">input minutes</p>
+        <div set:html={inputChartSvg} />
+        <p class="muted">solid = daily · dashed = 7d rolling average</p>
       </section>
 
       <details>
